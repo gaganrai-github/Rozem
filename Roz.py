@@ -14,7 +14,7 @@ import webbrowser
 from telegram import Update
 
 # Use environment variables for security
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "7070124825:AAFSnUIo0c-b_7dsMj8fFL_rUILLL3i7ab8")
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "...")
 
 # Initialize the Application with your bot token
 app = Application.builder().token(BOT_TOKEN).build()
