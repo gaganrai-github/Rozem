@@ -1,0 +1,7 @@
+python-telegram-bot
+screen-brightness-control
+pycaw
+psutil
+keyboard
+pyautogui
+opencv-python
