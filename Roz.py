@@ -14,7 +14,7 @@ import webbrowser
 from telegram import Update
 
 # Use environment variables for security
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "...")
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "7070124825:AAFSnUIo0c-b_7dsMj8fFL_rUILLL3i7ab8")
 
 # Initialize the Application with your bot token
 app = Application.builder().token(BOT_TOKEN).build()
@@ -177,7 +177,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
              InlineKeyboardButton("Open WhatsApp", callback_data='open_whatsapp')],
             [InlineKeyboardButton("System Info", callback_data='system_info'),
              InlineKeyboardButton("Take Screenshot", callback_data='screenshot')],
-            [InlineKeyboardButton("Take Photo", callback_data='click_photo')]
+            [InlineKeyboardButton("Take Photo", callback_data='click_photo')],
+            [InlineKeyboardButton("Menu", callback_data='menu')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
@@ -399,7 +400,7 @@ async def redu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def increase_brightness(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_brightness = sbc.get_brightness()[0]  # List se first element access karo
-    new_brightness = current_brightness + 5  # 1% increase
+    new_brightness = current_brightness + 10  # 1% increase
     if new_brightness > 100:
         new_brightness = 100  # Maximum 100% brightness
     sbc.set_brightness(new_brightness)
@@ -407,7 +408,7 @@ async def increase_brightness(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def decrease_brightness(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_brightness = sbc.get_brightness()[0]  # List se first element access karo
-    new_brightness = current_brightness - 5  # 1% decrease
+    new_brightness = current_brightness - 10  # 1% decrease
     if new_brightness < 0:
         new_brightness = 0  # Minimum 0% brightness
     sbc.set_brightness(new_brightness)
@@ -418,7 +419,7 @@ async def increase_volume(update: Update, context: ContextTypes.DEFAULT_TYPE):
     interface = devices.Activate(IAudioEndpointVolume._iid_, 0, None)
     volume = interface.QueryInterface(IAudioEndpointVolume)
     current_volume = volume.GetMasterVolumeLevelScalar()  # Current volume dekho
-    new_volume = current_volume + 0.05  # 1% increase
+    new_volume = current_volume + 0.10  # 1% increase
     if new_volume > 1.0:
         new_volume = 1.0  # Maximum volume
     volume.SetMasterVolumeLevelScalar(new_volume, None)
@@ -428,8 +429,8 @@ async def decrease_volume(update: Update, context: ContextTypes.DEFAULT_TYPE):
     devices = AudioUtilities.GetSpeakers()
     interface = devices.Activate(IAudioEndpointVolume._iid_, 0, None)
     volume = interface.QueryInterface(IAudioEndpointVolume)
-    current_volume = volume.GetMasterVolumeLevelScalar()  # Current volume dekho
-    new_volume = current_volume - 0.05  # 1% decrease
+    current_volume = volume.GetMasterVolumeLevelScalar()  # Current volume  dekho
+    new_volume = current_volume - 0.10  # 1% decrease
     if new_volume < 0.0:
         new_volume = 0.0  # Minimum volume
     volume.SetMasterVolumeLevelScalar(new_volume, None)
@@ -565,6 +566,7 @@ async def chatbot_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Back to the main menu:",
                 reply_markup=main_menu_markup
             )
+            
         else:
             response = response_dict.get(query, "I'm sorry, I didn't understand that. Can you rephrase?")
             await update.message.reply_text(response)
@@ -587,10 +589,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await take_screenshot(update, context)
     elif data == "click_photo":
         await click_photo(update, context)
+    elif data == "menu":
+        await menu(update,context)
 
 
 # Register handlers
-app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("start", menu))
 app.add_handler(CommandHandler("menu", menu))
 app.add_handler(CommandHandler("help", help_command))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chatbot_response))
