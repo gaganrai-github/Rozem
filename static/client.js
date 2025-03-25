@@ -1,28 +1,35 @@
 const startButton = document.getElementById("start");
 const stopButton = document.getElementById("stop");
 const video = document.getElementById("screenVideo");
-let peerConnection;
 let socket = io();
+let peerConnection;
+let screenStream;
 
 startButton.onclick = async () => {
     try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        // Laptop ka Screen Capture Karo
+        screenStream = await navigator.mediaDevices.getDisplayMedia({
+            video: { cursor: "always" }, 
+            audio: false
+        });
 
-        video.srcObject = stream;
+        // Video Tag me Dikhana
+        video.srcObject = screenStream;
 
+        // WebRTC Connection
         peerConnection = new RTCPeerConnection();
-        stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
+        screenStream.getTracks().forEach(track => peerConnection.addTrack(track, screenStream));
 
-        const offer = await peerConnection.createOffer();
+        // Create & Send Offer
+        let offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
-
         socket.emit("offer", offer);
 
         startButton.disabled = true;
         stopButton.disabled = false;
 
         stopButton.onclick = () => {
-            stream.getTracks().forEach(track => track.stop());
+            screenStream.getTracks().forEach(track => track.stop());
             peerConnection.close();
             startButton.disabled = false;
             stopButton.disabled = true;

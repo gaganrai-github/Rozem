@@ -1,0 +1,55 @@
+\<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screen Share</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.1/socket.io.js"></script>
+</head>
+<body>
+    <h2>📡 Screen Sharing</h2>
+    <video id="localVideo" autoplay muted style="width: 100%; height: auto;"></video>
+
+    <script>
+        const socket = io();
+        const peerConnection = new RTCPeerConnection({
+            iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+        });
+
+        // Get Screen Stream
+        async function startScreenShare() {
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                document.getElementById("localVideo").srcObject = stream;
+                stream.getTracks().forEach(track => peerConnection.addTrack(track, stream));
+
+                // Create Offer
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                socket.emit("offer", offer);
+            } catch (error) {
+                console.error("Screen Share Error:", error);
+            }
+        }
+
+        // Receive Answer
+        socket.on("answer", async (answer) => {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        });
+
+        // Receive ICE Candidates
+        socket.on("candidate", (candidate) => {
+            peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        });
+
+        // Send ICE Candidates
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate) {
+                socket.emit("candidate", event.candidate);
+            }
+        };
+
+        startScreenShare();
+    </script>
+</body>
+</html>
