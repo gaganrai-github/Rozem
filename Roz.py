@@ -140,11 +140,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     shortcut_keys = shortcuts.get(shortcut_name, None)
 
     # Simulate the key press
-    if shortcut_keys:
-        keyboard.send(shortcut_keys)
-        await query.message.reply_text(f"✅ *{shortcut_name}* shortcut triggered! (`{shortcut_keys}`)", parse_mode="Markdown")
-    else:
-        await query.message.reply_text("⚠️ Shortcut not found.")
+    # if shortcut_keys:
+    #     keyboard.send(shortcut_keys)
+    #     await query.message.reply_text(f"✅ *{shortcut_name}* shortcut triggered! (`{shortcut_keys}`)", parse_mode="Markdown")
+    # else:
+    #     await query.message.reply_text("⚠️ Shortcut not found.")
   # Replace with the actual user ID of the allowed user
 
 # Middleware to check if the user is authorized
@@ -594,7 +594,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # Register handlers
-app.add_handler(CommandHandler("start", menu))
+app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("menu", menu))
 app.add_handler(CommandHandler("help", help_command))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chatbot_response))
