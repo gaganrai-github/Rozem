@@ -209,34 +209,48 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE, file_p
     """Handles requests to open or send a specific file to the user."""
     if not await is_authorized(update, context):
         return
-        
+
     try:
-        message = update.callback_query.message
-        
+        query = update.callback_query # Get the callback query if it's from a button
+        message = query.message if query else update.message # Use query.message if available, else update.message
+
+        # Get the file name from the full path
+        file_name = os.path.basename(file_path)
+
         # Check file size before attempting to send
         if os.path.getsize(file_path) > MAX_FILE_SIZE:
             await message.reply_text("⚠️ File too large (max 50MB)")
             return
-            
+
         ext = os.path.splitext(file_path)[1].lower()
-        
+
         # Handle different file types by sending them appropriately
         if ext in ['.png', '.jpg', '.jpeg', '.gif']:
+            await message.reply_text(f"🖼️ Sending photo: `{file_name}`", parse_mode="Markdown")
             await message.reply_photo(photo=open(file_path, 'rb'))
         elif ext in ['.mp4', '.avi', '.mov']:
+            await message.reply_text(f"🎬 Sending video: `{file_name}`", parse_mode="Markdown")
             await message.reply_video(video=open(file_path, 'rb'))
-        elif ext in ['.txt', '.log', '.csv', '.py']:
-            # Read and send text content, limit to 4000 chars for Telegram message limit
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read(4000)
-                await message.reply_text(f"📝 Content:\n```\n{content}\n```", parse_mode="Markdown")
+        elif ext in ['.txt', '.log', '.csv', '.py', '.md', '.json', '.xml', '.html', '.css', '.js']: # Added more text file extensions
+            # Offer choice to download or read content
+            keyboard = [
+                [InlineKeyboardButton(f"⬇️ Download `{file_name}`", callback_data=f"download_file_{file_path}")],
+                [InlineKeyboardButton(f"📝 Read Content of `{file_name}`", callback_data=f"read_content_{file_path}")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await message.reply_text(
+                f"What would you like to do with `{file_name}`?",
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
         else:
             # For other file types, send as a generic document
+            await message.reply_text(f"📄 Sending document: `{file_name}`", parse_mode="Markdown")
             await message.reply_document(document=open(file_path, 'rb'))
-            
+
     except Exception as e:
         await handle_error(update, context, e)
-
+        
 # ==================== SYSTEM CONTROL ====================
 async def shutdown_pc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Prompts the user for confirmation before shutting down the PC."""
@@ -319,7 +333,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer() # Acknowledge the callback query
 
     callback_data = query.data
-    
+
     if callback_data == "hide_buttons":
         # Delete the message containing the buttons if it was stored
         if "last_message_id" in context.user_data:
@@ -327,11 +341,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.delete()
             except Exception as e:
                 print(f"Error deleting message: {e}")
-        
+
         # Send confirmation that buttons are hidden
         await query.message.reply_text("🔴 *Shortcut buttons hidden! Use /shortcuts to show again.*", parse_mode="Markdown")
         return
-    
+
     if callback_data.startswith("shortcut_"):
         # Handle shortcut key presses
         shortcut_name = callback_data.replace("shortcut_", "")
@@ -361,6 +375,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await browse_files(update, context, callback_data[7:]) # Pass the path extracted from callback_data
     elif callback_data.startswith('file_'):
         await handle_file(update, context, callback_data[5:]) # Pass the file path
+    elif callback_data.startswith('download_file_'): # New handler for downloading files
+        file_path = callback_data[14:]
+        await query.message.reply_text(f"⬇️ Sending file: `{os.path.basename(file_path)}` for download...", parse_mode="Markdown")
+        await query.message.reply_document(document=open(file_path, 'rb'))
+    elif callback_data.startswith('read_content_'): # New handler for reading content
+        file_path = callback_data[13:]
+        file_name = os.path.basename(file_path)
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read(4000)
+            await query.message.reply_text(f"📝 Content of `{file_name}`:\n```\n{content}\n```", parse_mode="Markdown")
     elif callback_data == 'shutdown_pc':
         await shutdown_pc(update, context)
     elif callback_data == 'confirm_shutdown':
