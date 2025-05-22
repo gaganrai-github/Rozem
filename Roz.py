@@ -1,11 +1,11 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 import screen_brightness_control as sbc
 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 import os
 import subprocess
 import time
-import keyboard as kb  # Renamed to avoid conflict with variable names
+import keyboard as kb
 import psutil
 import pyautogui
 import cv2
@@ -13,92 +13,104 @@ import webbrowser
 import pyperclip
 import random
 from comtypes import CLSCTX_ALL
+from ctypes import cast, POINTER
+from telegram.constants import ParseMode # Import ParseMode for explicit MarkdownV2 parsing
 
 # Configuration
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "7070124825:AAFSnUIo0c-b_7dsMj8fFL_rUILLL3i7ab8")
-ALLOWED_USER_ID = 5285057277  # Replace with your Telegram user ID 6489517818
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB max file size for transfers
+ALLOWED_USER_ID = 5285057277  # Replace with your Telegram user ID
+MAX_FILE_SIZE = 1024 * 1024 * 1024  # 50MB max file size for transfers
 
 # Initialize the Application with your bot token
 app = Application.builder().token(BOT_TOKEN).build()
 
+# Global dictionary for responses
 response_dict = {
     "hello": "Hello! How are you, sir?",
     "hi": "Hi! How can I assist you today?",
     "how are you": "I'm just a bot, but I'm functioning perfectly!",
-    "what is your name": "I am your friendly chatbot. You can call me Bot!",
+    "what is your name": "I am your friendly chatbot. You can call me ROZ!",
     "bye": "Goodbye! Have a great day!"
 }
 
+# Advanced shortcuts with descriptions for better user understanding
 shortcuts = {
-    'copy': 'ctrl+c',
-    'cut': 'ctrl+x',
-    'paste': 'ctrl+v',
-    'undo': 'ctrl+z',
-    'redo': 'ctrl+y',
-    'save': 'ctrl+s',
-    'open': 'ctrl+o',
-    'print': 'ctrl+p',
-    'select all': 'ctrl+a',
-    'find': 'ctrl+f',
-    'new': 'ctrl+n',
-    'close': 'ctrl+w',
-    'new folder': 'ctrl+shift+n',
-    'reopen closed tab': 'ctrl+shift+t',
-    'next tab': 'ctrl+tab',
-    'previous tab': 'ctrl+shift+tab',
-    'new tab': 'ctrl+t',
-    'underline': 'ctrl+u',
-    'bold': 'ctrl+b',
-    'italic': 'ctrl+i',
-    'open start menu': 'ctrl+esc',
-    'close window': 'alt+f4',
-    'switch apps': 'alt+tab',
-    'window menu': 'alt+space',
-    'show desktop': 'windows+d',
-    'file explorer': 'windows+e',
-    'run': 'windows+r',
-    'lock computer': 'windows +l',
-    'task view': 'windows+tab',
-    'help': 'f1',
-    'rename': 'f2',
-    'search': 'f3',
-    'address bar': 'f4',
-    'refresh': 'f5',
-    'cycle through elements': 'f6',
-    'spell check': 'f7',
-    'extend selection': 'f8',
-    'update fields': 'f9',
-    'activate menu': 'f10',
-    'toggle fullscreen': 'f11',
-    'save as': 'f12',
-    'cancel': 'esc',
-    'hold for uppercase': 'shift',
-    'right-click': 'shift+f10',
-    'change case': 'shift+f3',
-    'shrink selection': 'shift+f8',
-    'task manager': 'ctrl+shift+esc',
-    'zoom in': 'ctrl+plus',
-    'zoom out': 'ctrl+-',
-    'reset zoom': 'ctrl+0',
-    'clear browsing data': 'ctrl+shift+delete',
-    'new incognito window': 'ctrl+shift+n',
-    'private browsing': 'ctrl+shift+p',
-    'navigate tabs backward': 'ctrl+shift+tab',
-    'switch to next window': 'ctrl+alt+tab',
-    'switch to previous window': 'ctrl+alt+shift+tab',
-    'open new tab': 'ctrl+alt+t',
-    'open new private window': 'ctrl+alt+p',
-    'open developer tools': 'ctrl+alt+i',
-    'open console': 'ctrl+alt+c',
-    'view page source': 'ctrl+alt+u',
-    'find in page': 'ctrl+alt+f',
-    'lock screen orientation': 'ctrl+alt+l',
-    'reload': 'ctrl+alt+r',
-    'save page as': 'ctrl+alt+s',
-    'close current tab': 'ctrl+alt+w',
-    'quit browser': 'ctrl+alt+q',
-    'backslash': '|',
+    'copy': {'keys': 'ctrl+c', 'desc': 'Copies selected text or items'},
+    'cut': {'keys': 'ctrl+x', 'desc': 'Cuts selected text or items'},
+    'paste': {'keys': 'ctrl+v', 'desc': 'Pastes copied/cut content'},
+    'undo': {'keys': 'ctrl+z', 'desc': 'Undoes the last action'},
+    'redo': {'keys': 'ctrl+y', 'desc': 'Redoes the undone action'},
+    'save': {'keys': 'ctrl+s', 'desc': 'Saves the current document'},
+    'open': {'keys': 'ctrl+o', 'desc': 'Opens a file dialog'},
+    'print': {'keys': 'ctrl+p', 'desc': 'Opens print dialog'},
+    'select all': {'keys': 'ctrl+a', 'desc': 'Selects all content'},
+    'find': {'keys': 'ctrl+f', 'desc': 'Opens find dialog'},
+    'new': {'keys': 'ctrl+n', 'desc': 'Creates a new document/window'},
+    'close': {'keys': 'ctrl+w', 'desc': 'Closes current tab/window'},
+    'new folder': {'keys': 'ctrl+shift+n', 'desc': 'Creates a new folder'},
+    'reopen closed tab': {'keys': 'ctrl+shift+t', 'desc': 'Reopens the last closed browser tab'},
+    'next tab': {'keys': 'ctrl+tab', 'desc': 'Switches to the next tab'},
+    'previous tab': {'keys': 'ctrl+shift+tab', 'desc': 'Switches to the previous tab'},
+    'new tab': {'keys': 'ctrl+t', 'desc': 'Opens a new browser tab'},
+    'underline': {'keys': 'ctrl+u', 'desc': 'Underlines selected text'},
+    'bold': {'keys': 'ctrl+b', 'desc': 'Bolds selected text'},
+    'italic': {'keys': 'ctrl+i', 'desc': 'Italicizes selected text'},
+    'open start menu': {'keys': 'windows', 'desc': 'Opens the Start Menu'},
+    'close window': {'keys': 'alt+f4', 'desc': 'Closes the active window'},
+    'switch apps': {'keys': 'alt+tab', 'desc': 'Switches between open applications'},
+    'window menu': {'keys': 'alt+space', 'desc': 'Opens the window system menu'},
+    'show desktop': {'keys': 'windows+d', 'desc': 'Minimizes all windows to show desktop'},
+    'file explorer': {'keys': 'windows+e', 'desc': 'Opens File Explorer'},
+    'run': {'keys': 'windows+r', 'desc': 'Opens the Run dialog'},
+    'lock computer': {'keys': 'windows+l', 'desc': 'Locks the computer'},
+    'task view': {'keys': 'windows+tab', 'desc': 'Opens Task View'},
+    'help': {'keys': 'f1', 'desc': 'Opens help for the active application'},
+    'rename': {'keys': 'f2', 'desc': 'Renames selected item'},
+    'search': {'keys': 'f3', 'desc': 'Opens search function'},
+    'address bar': {'keys': 'f4', 'desc': 'Activates address bar in File Explorer/browser'},
+    'refresh': {'keys': 'f5', 'desc': 'Refreshes the active window'},
+    'cycle through elements': {'keys': 'f6', 'desc': 'Cycles through elements in a window or desktop'},
+    'spell check': {'keys': 'f7', 'desc': 'Performs spell check'},
+    'extend selection': {'keys': 'f8', 'desc': 'Enables extend mode in some applications'},
+    'update fields': {'keys': 'f9', 'desc': 'Updates selected fields'},
+    'activate menu': {'keys': 'f10', 'desc': 'Activates menu bar'},
+    'toggle fullscreen': {'keys': 'f11', 'desc': 'Toggles full screen mode'},
+    'save as': {'keys': 'f12', 'desc': 'Opens Save As dialog'},
+    'cancel': {'keys': 'esc', 'desc': 'Cancels current operation'},
+    'hold for uppercase': {'keys': 'shift', 'desc': 'Temporarily capitalizes letters'},
+    'right-click': {'keys': 'shift+f10', 'desc': 'Simulates right-click'},
+    'change case': {'keys': 'shift+f3', 'desc': 'Changes case of selected text'},
+    'shrink selection': {'keys': 'shift+f8', 'desc': 'Shrinks selection in extend mode'},
+    'task manager': {'keys': 'ctrl+shift+esc', 'desc': 'Opens Task Manager directly'},
+    'zoom in': {'keys': 'ctrl++', 'desc': 'Zooms in'},
+    'zoom out': {'keys': 'ctrl+-', 'desc': 'Zooms out'},
+    'reset zoom': {'keys': 'ctrl+0', 'desc': 'Resets zoom level'},
+    'clear browsing data': {'keys': 'ctrl+shift+delete', 'desc': 'Opens clear browsing data dialog'},
+    'new incognito window': {'keys': 'ctrl+shift+n', 'desc': 'Opens a new incognito/private browser window'},
+    'private browsing': {'keys': 'ctrl+shift+p', 'desc': 'Opens a new private browser window (Firefox)'},
+    'navigate tabs backward': {'keys': 'ctrl+shift+tab', 'desc': 'Navigates to the previous tab'},
+    'switch to next window': {'keys': 'alt+tab', 'desc': 'Switches to next window (Windows)'},
+    'switch to previous window': {'keys': 'alt+shift+tab', 'desc': 'Switches to previous window (Windows)'},
+    'open new tab': {'keys': 'ctrl+t', 'desc': 'Opens a new tab'},
+    'open new private window': {'keys': 'ctrl+shift+p', 'desc': 'Opens a new private window'},
+    'open developer tools': {'keys': 'ctrl+shift+i', 'desc': 'Opens browser developer tools'},
+    'open console': {'keys': 'ctrl+shift+j', 'desc': 'Opens browser console'},
+    'view page source': {'keys': 'ctrl+u', 'desc': 'Views page source'},
+    'find in page': {'keys': 'ctrl+f', 'desc': 'Finds text on the current page'},
+    'lock screen orientation': {'keys': 'windows+o', 'desc': 'Toggles screen orientation lock (Windows Tablet Mode)'},
+    'reload': {'keys': 'f5', 'desc': 'Reloads the page'},
+    'save page as': {'keys': 'ctrl+s', 'desc': 'Saves the current webpage'},
+    'close current tab': {'keys': 'ctrl+w', 'desc': 'Closes the current tab'},
+    'quit browser': {'keys': 'alt+f4', 'desc': 'Quits the browser (closes all windows)'},
+    'backslash': {'keys': '\\', 'desc': 'Types a backslash'},
+    'enter': {'keys': 'enter', 'desc': 'Confirms an action or new line'},
+    'up arrow': {'keys': 'up', 'desc': 'Moves cursor/selection up'},
+    'down arrow': {'keys': 'down', 'desc': 'Moves cursor/selection down'},
+    'left arrow': {'keys': 'left', 'desc': 'Moves cursor/selection left'},
+    'right arrow': {'keys': 'right', 'desc': 'Moves cursor/selection right'},
+    'backspace': {'keys': 'backspace', 'desc': 'Deletes character before cursor'},
+    'home': {'keys': 'home', 'desc': 'Moves cursor to beginning of line/page'},
+    'end': {'keys': 'end', 'desc': 'Moves cursor to end of line/page'}
 }
 
 # ==================== UTILITY FUNCTIONS ====================
@@ -116,7 +128,7 @@ async def handle_error(update: Update, context: ContextTypes.DEFAULT_TYPE, error
     try:
         message = update.message or (update.callback_query.message if update.callback_query else None)
         if message:
-            await message.reply_text(f"❌ Error: {str(error)}")
+            await message.reply_text(f"❌ An error occurred: {str(error)}\nPlease try again or use /help.")
         print(f"Error: {error}", flush=True)
     except Exception as e:
         print(f"Critical error handler failure: {e}", flush=True)
@@ -128,9 +140,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
         
     await update.message.reply_text(
-        "👋 *Welcome to Remote Control Bot!*\n\n"
-        "I can help you control your computer remotely. Use /menu to see available options "
-        "or type /help for a list of commands.",
+        "👋 *Welcome to ROZ - Your Remote Control Bot!* 👋\n\n"
+        "I can help you control your computer remotely. "
+        "Use the menu buttons below or type /help for a list of commands.\n\n"
+        "To get started, try browsing files or checking system info!",
         parse_mode="Markdown",
         reply_markup=main_menu_markup
     )
@@ -146,26 +159,59 @@ async def browse_files(update: Update, context: ContextTypes.DEFAULT_TYPE, path=
         return
         
     try:
-        query = update.callback_query # Get the callback query if it's from a button
-        message = query.message if query else update.message # Use query.message if available, else update.message
-
-        items = os.listdir(path)
+        message = update.message or update.callback_query.message
         
+        if not os.path.exists(path) or not os.path.isdir(path):
+            await message.reply_text("⚠️ Invalid path or not a directory. Returning to root.")
+            path = "C:\\" # Reset to C drive if path is invalid
+
+        items = []
+        try:
+            items = os.listdir(path)
+        except PermissionError:
+            await message.reply_text("⛔️ Permission denied to access this directory.")
+            parent = os.path.dirname(path)
+            if parent == path: # If already at root and still permission denied
+                await message.reply_text("Cannot access any further. Please try another drive or directory.")
+                return
+            else:
+                return await browse_files(update, context, parent) # Go back to parent on permission error
+        except Exception as e:
+            await message.reply_text(f"❌ Error listing directory contents: {e}")
+            parent = os.path.dirname(path)
+            if parent == path:
+                return
+            else:
+                return await browse_files(update, context, parent)
+
         keyboard = []
         
-        # Add drive buttons at root level (only if current path is C:\)
+        # Add drive buttons at root level
         if path == "C:\\":
-            drives = [f"{d}:\\" for d in "CDEFGHIJKLMNOPQRSTUVWXYZ" if os.path.exists(f"{d}:\\")]
-            for drive in drives:
-                keyboard.append([InlineKeyboardButton(f"📀 Drive {drive}", callback_data=f"browse_{drive}")])
+            # Corrected the list comprehension syntax: removed the duplicate 'd'
+            drives = [f"{d}:\\" for d in "CDEFGHIJKLMNOPQRSTUVWXYZ" if os.path.exists(f"{d}:\\") and os.path.isdir(f"{d}:\\")]
+            if drives:
+                drive_buttons = []
+                for drive in drives:
+                    drive_buttons.append(InlineKeyboardButton(f"💿 Drive {drive}", callback_data=f"browse_{drive}"))
+                keyboard.append(drive_buttons)
+            else:
+                keyboard.append([InlineKeyboardButton("🤷‍♂️ No drives found", callback_data="no_action")])
         
         # Folders first
+        folder_buttons = []
         for item in sorted(items):
             full_path = os.path.join(path, item)
             if os.path.isdir(full_path):
-                keyboard.append([InlineKeyboardButton(f"📁 {item}", callback_data=f"browse_{full_path}")])
-        
+                folder_buttons.append(InlineKeyboardButton(f"📁 {item}", callback_data=f"browse_{full_path}"))
+                if len(folder_buttons) == 2: # Max 2 buttons per row for better readability
+                    keyboard.append(folder_buttons)
+                    folder_buttons = []
+        if folder_buttons: # Add any remaining folder buttons
+            keyboard.append(folder_buttons)
+            
         # Files with icons
+        file_buttons = []
         for item in sorted(items):
             full_path = os.path.join(path, item)
             if os.path.isfile(full_path):
@@ -173,33 +219,58 @@ async def browse_files(update: Update, context: ContextTypes.DEFAULT_TYPE, path=
                 ext = os.path.splitext(item)[1].lower()
                 if ext in ['.png', '.jpg', '.jpeg', '.gif']:
                     icon = "🖼️"
-                elif ext in ['.mp4', '.avi', '.mov']:
+                elif ext in ['.mp4', '.avi', '.mov', '.mkv']:
                     icon = "🎬"
-                keyboard.append([InlineKeyboardButton(f"{icon} {item}", callback_data=f"file_{full_path}")])
+                elif ext in ['.mp3', '.wav', '.flac', '.ogg']:
+                    icon = "🎵"
+                elif ext in ['.pdf']:
+                    icon = "📄"
+                elif ext in ['.zip', '.rar', '.7z']:
+                    icon = "📦"
+                elif ext in ['.exe', '.msi']:
+                    icon = "⚙️"
+                elif ext in ['.doc', '.docx']:
+                    icon = "📄"
+                elif ext in ['.xls', '.xlsx']:
+                    icon = "📊"
+                elif ext in ['.ppt', '.pptx']:
+                    icon = "📊"
+                elif ext in ['.txt', '.log', '.ini', '.cfg', '.py', '.js', '.html', '.css']:
+                    icon = "📝" # Generic text/code file icon
+                file_buttons.append(InlineKeyboardButton(f"{icon} {item}", callback_data=f"file_{full_path}"))
+                if len(file_buttons) == 2: # Max 2 buttons per row
+                    keyboard.append(file_buttons)
+                    file_buttons = []
+        if file_buttons: # Add any remaining file buttons
+            keyboard.append(file_buttons)
         
-        # Navigation buttons: Parent Directory
+        # Navigation and Action buttons
+        nav_buttons = []
         parent = os.path.dirname(path)
-        if parent != path: # Ensure we don't go above the root drive (e.g., C:\'s parent is still C:\)
-            keyboard.append([InlineKeyboardButton("⬆️ Parent Directory", callback_data=f"browse_{parent}")])
+        if parent != path: # If not at root, show parent directory button
+            nav_buttons.append(InlineKeyboardButton("⬆️ Parent Directory", callback_data=f"browse_{parent}"))
         
-        # Action buttons for file browser menu
-        keyboard.append([
-            InlineKeyboardButton("🖥️ Shutdown PC", callback_data="shutdown_pc"),
-            InlineKeyboardButton("🔙 Main Menu", callback_data="main_menu")
-        ])
-
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        # Edit the existing message if it's a callback query, otherwise send a new one
-        if query:
-            await query.edit_message_text(
-                text=f"📂 Browsing: {path}",
-                reply_markup=reply_markup
+        # Add "Go to C:\" button if not already at C:\
+        if path != "C:\\":
+            nav_buttons.append(InlineKeyboardButton("🏠 Go to C:\\", callback_data="browse_C:\\"))
+            
+        if nav_buttons:
+            keyboard.append(nav_buttons)
+            
+        keyboard.append([InlineKeyboardButton("🔙 Back to Main Menu", callback_data="main_menu")])
+        
+        # Edit the message if it's a callback query to prevent multiple messages
+        if update.callback_query:
+            await message.edit_text(
+                f"📂 Current Directory: `{path}`",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode="Markdown"
             )
         else:
             await message.reply_text(
-                f"📂 Browsing: {path}",
-                reply_markup=reply_markup
+                f"📂 Current Directory: `{path}`",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode="Markdown"
             )
         
     except Exception as e:
@@ -209,30 +280,35 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE, file_p
     """Handles requests to open or send a specific file to the user."""
     if not await is_authorized(update, context):
         return
-
+        
     try:
-        query = update.callback_query # Get the callback query if it's from a button
-        message = query.message if query else update.message # Use query.message if available, else update.message
-
-        # Get the file name from the full path
-        file_name = os.path.basename(file_path)
-
-        # Check file size before attempting to send
-        if os.path.getsize(file_path) > MAX_FILE_SIZE:
-            await message.reply_text("⚠️ File too large (max 50MB)")
+        message = update.callback_query.message
+        
+        if not os.path.exists(file_path):
+            await message.reply_text("⚠️ File not found.")
+            # Optionally, re-show the current directory
+            parent_dir = os.path.dirname(file_path)
+            await browse_files(update, context, parent_dir if parent_dir else "C:\\")
             return
 
+        # Check file size
+        file_size = os.path.getsize(file_path)
+        if file_size > MAX_FILE_SIZE:
+            await message.reply_text(f"⚠️ File too large (max {MAX_FILE_SIZE / (1024*1024):.0f}MB). This file is {file_size / (1024*1024):.2f}MB.")
+            return
+            
         ext = os.path.splitext(file_path)[1].lower()
+        file_name = os.path.basename(file_path) # Define file_name here
 
-        # Handle different file types by sending them appropriately
-        if ext in ['.png', '.jpg', '.jpeg', '.gif']:
-            await message.reply_text(f"🖼️ Sending photo: `{file_name}`", parse_mode="Markdown")
+        # Handle different file types
+        if ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
             await message.reply_photo(photo=open(file_path, 'rb'))
-        elif ext in ['.mp4', '.avi', '.mov']:
-            await message.reply_text(f"🎬 Sending video: `{file_name}`", parse_mode="Markdown")
+        elif ext in ['.mp4', '.avi', '.mov', '.mkv', '.webm']:
             await message.reply_video(video=open(file_path, 'rb'))
-        elif ext in ['.txt', '.log', '.csv', '.py', '.md', '.json', '.xml', '.html', '.css', '.js']: # Added more text file extensions
-            # Offer choice to download or read content
+        elif ext in ['.mp3', '.wav', '.flac', '.ogg']:
+            await message.reply_audio(audio=open(file_path, 'rb'))
+        elif ext in ['.txt', '.log', '.csv', '.html', '.css', '.json', '.xml', '.md', '.ini', '.cfg']: 
+            # Offer choice to download or read content for general text files
             keyboard = [
                 [InlineKeyboardButton(f"⬇️ Download `{file_name}`", callback_data=f"download_file_{file_path}")],
                 [InlineKeyboardButton(f"📝 Read Content of `{file_name}`", callback_data=f"read_content_{file_path}")]
@@ -243,86 +319,199 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE, file_p
                 reply_markup=reply_markup,
                 parse_mode="Markdown"
             )
+        elif ext in ['.py', '.js']: # Specific handling for executable scripts
+            keyboard = [
+                [InlineKeyboardButton(f"⬇️ Download `{file_name}`", callback_data=f"download_file_{file_path}")],
+                [InlineKeyboardButton(f"📝 Read Content of `{file_name}`", callback_data=f"read_content_{file_path}")],
+                [InlineKeyboardButton(f"▶️ Run `{file_name}`", callback_data=f"run_file_{file_path}")] # New "Run" option
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await message.reply_text(
+                f"What would you like to do with `{file_name}`?",
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
         else:
-            # For other file types, send as a generic document
-            await message.reply_text(f"📄 Sending document: `{file_name}`", parse_mode="Markdown")
             await message.reply_document(document=open(file_path, 'rb'))
-
+            
     except Exception as e:
         await handle_error(update, context, e)
+
+async def run_script_file(update: Update, context: ContextTypes.DEFAULT_TYPE, file_path: str):
+    """Executes a Python or JavaScript file."""
+    if not await is_authorized(update, context):
+        return
         
+    try:
+        message = update.callback_query.message
+        
+        if not os.path.exists(file_path):
+            await message.reply_text("⚠️ File not found.")
+            return
+
+        ext = os.path.splitext(file_path)[1].lower()
+        
+        if ext == '.py':
+            await message.reply_text(f"▶️ Running Python script: `{os.path.basename(file_path)}`...", parse_mode="Markdown")
+            # Using subprocess.Popen to avoid blocking the bot and get output
+            process = subprocess.Popen(['python', file_path], 
+                                       stdout=subprocess.PIPE, 
+                                       stderr=subprocess.PIPE, 
+                                       text=True, 
+                                       encoding='utf-8')
+            stdout, stderr = process.communicate(timeout=30) # Add a timeout
+            
+            response = ""
+            if stdout:
+                response += f"```\n{stdout}\n```"
+            if stderr:
+                response += f"❌ Error:\n```\n{stderr}\n```"
+            if not stdout and not stderr:
+                response = "✅ Script executed successfully with no output."
+                
+            await message.reply_text(f"Script output for `{os.path.basename(file_path)}`:\n{response}", parse_mode="Markdown")
+
+        elif ext == '.js':
+            await message.reply_text(f"▶️ Running JavaScript file (requires Node.js): `{os.path.basename(file_path)}`...", parse_mode="Markdown")
+            # Ensure Node.js is in your system's PATH
+            process = subprocess.Popen(['node', file_path], 
+                                       stdout=subprocess.PIPE, 
+                                       stderr=subprocess.PIPE, 
+                                       text=True, 
+                                       encoding='utf-8')
+            stdout, stderr = process.communicate(timeout=30)
+            
+            response = ""
+            if stdout:
+                response += f"```\n{stdout}\n```"
+            if stderr:
+                response += f"❌ Error:\n```\n{stderr}\n```"
+            if not stdout and not stderr:
+                response = "✅ Script executed successfully with no output."
+                
+            await message.reply_text(f"Script output for `{os.path.basename(file_path)}`:\n{response}", parse_mode="Markdown")
+        else:
+            await message.reply_text("⚠️ This file type cannot be run directly.")
+            
+    except subprocess.TimeoutExpired:
+        process.kill()
+        await message.reply_text(f"⏰ Script execution timed out for `{os.path.basename(file_path)}`.", parse_mode="Markdown")
+    except FileNotFoundError:
+        await message.reply_text(f"❌ Error: Python/Node.js executable not found. Make sure they are installed and in your system's PATH.", parse_mode="Markdown")
+    except Exception as e:
+        await handle_error(update, context, e)
+
+
 # ==================== SYSTEM CONTROL ====================
 async def shutdown_pc(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Prompts the user for confirmation before shutting down the PC."""
+    """Prompts the user for confirmation before shutting down the PC, offering options."""
     if not await is_authorized(update, context):
         return
         
     try:
         message = update.message or update.callback_query.message
         
-        # Confirmation keyboard for shutdown
         keyboard = [
-            [InlineKeyboardButton("✅ Yes, shutdown now", callback_data="confirm_shutdown")],
-            [InlineKeyboardButton("❌ Cancel", callback_data="cancel_shutdown")]
+            [InlineKeyboardButton("✅ Yes, shutdown immediately", callback_data="confirm_shutdown")],
+            [InlineKeyboardButton("⏰ Shutdown in 60 seconds", callback_data="shutdown_60s")],
+            [InlineKeyboardButton("❌ Cancel Shutdown", callback_data="cancel_shutdown")]
         ]
         
         await message.reply_text(
-            "⚠️ Are you sure you want to shutdown the PC immediately?",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            "⚠️ *Are you sure you want to shutdown the PC?*",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
         )
     except Exception as e:
         await handle_error(update, context, e)
 
 async def confirm_shutdown(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Executes the PC shutdown command."""
+    """Executes the PC shutdown command immediately."""
+    if not await is_authorized(update, context):
+        return
     try:
         message = update.callback_query.message
-        await message.edit_text("🖥️ Shutting down PC NOW...")
-        os.system("shutdown /s /t 1")  # Immediate shutdown command for Windows
+        await message.edit_text("🖥️ Shutting down PC NOW... Goodbye!")
+        os.system("shutdown /s /t 1")  # Immediate shutdown
     except Exception as e:
         await handle_error(update, context, e)
 
-# ==================== MENU SYSTEM ====================
+async def shutdown_60s(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Schedules PC shutdown in 60 seconds."""
+    if not await is_authorized(update, context):
+        return
+    try:
+        message = update.callback_query.message
+        await message.edit_text("🖥️ PC will shutdown in 60 seconds. You can cancel with /cancel_shutdown.")
+        os.system("shutdown /s /t 60")
+    except Exception as e:
+        await handle_error(update, context, e)
+
+async def cancel_shutdown(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Aborts any scheduled PC shutdown."""
+    if not await is_authorized(update, context):
+        return
+    try:
+        message = update.message or update.callback_query.message
+        os.system("shutdown /a") # Abort shutdown
+        await message.edit_text("✅ Scheduled shutdown has been cancelled.")
+    except Exception as e:
+        await handle_error(update, context, e)
+
+# ==================== MENU SYSTEM (Enhanced) ====================
 async def main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Displays the main menu options to the user."""
+    """Displays the main menu options to the user using ReplyKeyboardMarkup."""
     if not await is_authorized(update, context):
         return
         
     try:
         message = update.message or update.callback_query.message
-        keyboard = [
-            [InlineKeyboardButton("📁 Browse Files", callback_data='browse_C:\\'),
-             InlineKeyboardButton("🎹 Shortcuts", callback_data='show_shortcuts')],
-            [InlineKeyboardButton("🖥️ System Info", callback_data='system_info'),
-             InlineKeyboardButton("📸 Screenshot", callback_data='screenshot')],
-            [InlineKeyboardButton("🖥️ Shutdown PC", callback_data='shutdown_pc')]
-        ]
+        # Using the ReplyKeyboardMarkup for the main menu for persistent buttons
         await message.reply_text(
-            "🏠 Main Menu - Choose an option:",
-            reply_markup=InlineKeyboardMarkup(keyboard))
+            "� *Main Menu - Choose an option:*",
+            parse_mode="Markdown",
+            reply_markup=main_menu_markup
+        )
     except Exception as e:
         await handle_error(update, context, e)
 
-# ==================== ORIGINAL FEATURES ====================
+# ==================== ORIGINAL FEATURES (Refactored and Improved) ====================
 async def send_shortcut_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Sends a message with inline keyboard buttons for various shortcuts."""
     if not await is_authorized(update, context):
         return
     
     message = update.message or update.callback_query.message
-    keyboard_buttons = [[InlineKeyboardButton(name, callback_data=f"shortcut_{name}")] for name in shortcuts.keys()]
     
-    # Adding "Hide Buttons" at the end
-    keyboard_buttons.append([InlineKeyboardButton("🛑 Hide Buttons", callback_data="hide_buttons")])
+    # Create a list of all shortcut names for inline buttons
+    shortcut_names = list(shortcuts.keys())
+    
+    # Divide shortcuts into rows for better display
+    keyboard_buttons = []
+    row = []
+    for name in shortcut_names:
+        row.append(InlineKeyboardButton(name.title(), callback_data=f"shortcut_{name}"))
+        if len(row) == 3: # 3 buttons per row
+            keyboard_buttons.append(row)
+            row = []
+    if row: # Add any remaining buttons
+        keyboard_buttons.append(row)
+    
+    # Adding "Hide Buttons" and "Back to Main Menu" at the end
+    keyboard_buttons.append([
+        InlineKeyboardButton("🛑 Hide Shortcuts", callback_data="hide_shortcuts"),
+        InlineKeyboardButton("🔙 Main Menu", callback_data="main_menu_from_shortcuts")
+    ])
 
     reply_markup = InlineKeyboardMarkup(keyboard_buttons)
 
-    sent_message = await message.reply_text("🎹 *Press a button to trigger a shortcut:*", 
+    sent_message = await message.reply_text("🎹 *Press a button to trigger a shortcut:*\n\n"
+                                           "💡 *Tip:* You can also type 'press [shortcut_name]' "
+                                           "or 'press [keys]' directly in the chat!", 
                                            reply_markup=reply_markup, 
                                            parse_mode="Markdown")
     
-    # Store the message ID to delete it later
-    context.user_data["last_message_id"] = sent_message.message_id
+    context.user_data["last_shortcut_message_id"] = sent_message.message_id
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -330,375 +519,542 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     It routes to appropriate functions based on callback_data.
     """
     query = update.callback_query
-    await query.answer() # Acknowledge the callback query
+    await query.answer() # Acknowledge the callback query immediately
 
     callback_data = query.data
-
-    if callback_data == "hide_buttons":
-        # Delete the message containing the buttons if it was stored
-        if "last_message_id" in context.user_data:
+    
+    if callback_data == "hide_shortcuts":
+        if "last_shortcut_message_id" in context.user_data:
             try:
                 await query.message.delete()
             except Exception as e:
                 print(f"Error deleting message: {e}")
-
-        # Send confirmation that buttons are hidden
-        await query.message.reply_text("🔴 *Shortcut buttons hidden! Use /shortcuts to show again.*", parse_mode="Markdown")
+            del context.user_data["last_shortcut_message_id"] # Clean up the stored ID
+        await query.message.reply_text("🔴 *Shortcut buttons hidden! Use /shortcuts to show them again.*", parse_mode="Markdown")
+        # Optionally, show the main menu again after hiding buttons
+        await main_menu(update, context)
         return
-
+    
     if callback_data.startswith("shortcut_"):
-        # Handle shortcut key presses
         shortcut_name = callback_data.replace("shortcut_", "")
-        shortcut_keys = shortcuts.get(shortcut_name, None)
+        shortcut_info = shortcuts.get(shortcut_name)
 
-        if shortcut_keys:
+        if shortcut_info:
             try:
-                kb.press_and_release(shortcut_keys) # Simulate key press
-                await query.message.reply_text(f"✅ *{shortcut_name}* shortcut triggered! (`{shortcut_keys}`)", parse_mode="Markdown")
+                kb.press_and_release(shortcut_info['keys'])
+                await query.message.reply_text(f"✅ *'{shortcut_name.title()}'* shortcut triggered! (`{shortcut_info['keys']}`)", parse_mode="Markdown")
             except Exception as e:
-                await query.message.reply_text(f"⚠️ Error triggering shortcut: {e}")
+                await query.message.reply_text(f"⚠️ Error triggering shortcut '{shortcut_name}': {e}")
         else:
             await query.message.reply_text("⚠️ Shortcut not found.")
-    elif callback_data == "youtube":
+    
+    elif callback_data == "youtube_link":
         await youtube_url(update, context)
-    elif callback_data == "open_whatsapp":
+    elif callback_data == "open_whatsapp_app":
         await open_whatsapp(update, context)
     elif callback_data == "system_info":
         await system_info(update, context)
-    elif callback_data == "screenshot":
+    elif callback_data == "take_screenshot":
         await take_screenshot(update, context)
-    elif callback_data == "click_photo":
+    elif callback_data == "click_webcam_photo":
         await click_photo(update, context)
-    elif callback_data == "menu":
-        await menu(update, context)
     elif callback_data.startswith('browse_'):
-        await browse_files(update, context, callback_data[7:]) # Pass the path extracted from callback_data
+        await browse_files(update, context, callback_data[7:])
     elif callback_data.startswith('file_'):
-        await handle_file(update, context, callback_data[5:]) # Pass the file path
+        await handle_file(update, context, callback_data[5:])
     elif callback_data.startswith('download_file_'): # New handler for downloading files
         file_path = callback_data[14:]
-        await query.message.reply_text(f"⬇️ Sending file: `{os.path.basename(file_path)}` for download...", parse_mode="Markdown")
-        await query.message.reply_document(document=open(file_path, 'rb'))
+        try:
+            await query.message.reply_text(f"⬇️ Sending file: `{os.path.basename(file_path)}` for download...", parse_mode="Markdown")
+            await query.message.reply_document(document=open(file_path, 'rb'))
+        except Exception as e:
+            await handle_error(update, context, e)
     elif callback_data.startswith('read_content_'): # New handler for reading content
         file_path = callback_data[13:]
         file_name = os.path.basename(file_path)
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read(4000)
-            await query.message.reply_text(f"📝 Content of `{file_name}`:\n```\n{content}\n```", parse_mode="Markdown")
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read(4000) # Limit content to avoid message length issues
+                if len(content) >= 4000:
+                    content += "\n\n... (content truncated)"
+                await query.message.reply_text(f"📝 Content of `{file_name}`:\n```\n{content}\n```", parse_mode="Markdown")
+        except Exception as e:
+            await handle_error(update, context, e)
+    elif callback_data.startswith('run_file_'): # NEW: Handler for running files
+        file_path = callback_data[9:] # 'run_file_' is 9 characters
+        await run_script_file(update, context, file_path)
     elif callback_data == 'shutdown_pc':
         await shutdown_pc(update, context)
     elif callback_data == 'confirm_shutdown':
         await confirm_shutdown(update, context)
+    elif callback_data == 'shutdown_60s':
+        await shutdown_60s(update, context)
     elif callback_data == 'cancel_shutdown':
-        await query.message.edit_text("✅ Shutdown cancelled") # Edit message to confirm cancellation
-    elif callback_data == 'main_menu':
+        await cancel_shutdown(update, context)
+    elif callback_data == 'main_menu' or callback_data == 'main_menu_from_shortcuts':
         await main_menu(update, context)
     elif callback_data == 'show_shortcuts':
         await send_shortcut_buttons(update, context)
+    elif callback_data == "no_action":
+        await query.message.edit_text("No action available.")
 
-# Menu definitions for ReplyKeyboardMarkup (bottom keyboard)
-main_menu_buttons = [
-    [KeyboardButton("📁 Files"), KeyboardButton("🖥️ System Info")],
-    [KeyboardButton("📸 Screenshot"),KeyboardButton("🔃 Swap App"), KeyboardButton("📷 Click Photo")],
-    [KeyboardButton("🔁 Prev Tab"), KeyboardButton("TAB"), KeyboardButton("🔁 Next Tab")],
-    [KeyboardButton("Space"), KeyboardButton("Refress")],
-    [KeyboardButton("ℹ️ Help"), KeyboardButton("⚙️ More Options")] 
-]
-main_menu_markup = ReplyKeyboardMarkup(main_menu_buttons, resize_keyboard=True)
 
-more_options_buttons = [
-    [KeyboardButton("📸 Screenshot"), KeyboardButton("📲 Show Apps")],
-    [KeyboardButton("⬆️"), KeyboardButton("⬅️"), KeyboardButton("➡️"), KeyboardButton("⬇️")],
-    [KeyboardButton("Home"), KeyboardButton("End"), KeyboardButton("🔙"), KeyboardButton("↩️")],
-    [KeyboardButton("🔍 Zoom IN"), KeyboardButton("Space"), KeyboardButton("🔎 Zoom OUT")],
-    [KeyboardButton("⏪ Main Menu"), KeyboardButton("⏩ Next Menu")]
-]
-more_options_markup = ReplyKeyboardMarkup(more_options_buttons, resize_keyboard=True)
+# Reply Keyboard Markups for main navigation
+main_menu_markup = ReplyKeyboardMarkup([
+    [KeyboardButton("📁 Browse Files"), KeyboardButton("🖥️ System Info")],
+    [KeyboardButton("📸 Screenshot"), KeyboardButton("📷 Click Photo")],
+    [KeyboardButton("⚡ Shortcuts"), KeyboardButton("🚀 Quick Actions")],
+    [KeyboardButton("⚙️ System Control"), KeyboardButton("ℹ️ Help")]
+], resize_keyboard=True, one_time_keyboard=False)
 
-system_buttons = [
-    [KeyboardButton("📸 Screenshot"), KeyboardButton("🔓 Unlock System")],
-    [KeyboardButton("🔅➕"), KeyboardButton("🔅➖"), KeyboardButton("🔉"), KeyboardButton("🔊")],
-    [KeyboardButton("Undu"), KeyboardButton("Redu")],
-    [KeyboardButton("⏪ Previus Menu"), KeyboardButton("🏠 Menu"), KeyboardButton("⏩ Next Menu")]
-]
-system_markup = ReplyKeyboardMarkup(system_buttons, resize_keyboard=True)
+quick_actions_markup = ReplyKeyboardMarkup([
+    [KeyboardButton("🌐 Open Google"), KeyboardButton("▶️ Open YouTube")],
+    [KeyboardButton("💬 Open WhatsApp"), KeyboardButton("📝 Type Text")],
+    [KeyboardButton("⬆️ Up"), KeyboardButton("⬇️ Down"), KeyboardButton("⬅️ Left"), KeyboardButton("➡️ Right")],
+    [KeyboardButton("↩️ Enter"), KeyboardButton("🔙 Backspace"), KeyboardButton("Space")],
+    [KeyboardButton("⏪ Main Menu")]
+], resize_keyboard=True, one_time_keyboard=False)
 
-async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Displays the main menu when /menu command is used."""
-    await update.message.reply_text(
-        "Hello sir, Welcome to the Bot. Choose an option from the buttons below:",
-        reply_markup=main_menu_markup
-    )
+system_control_markup = ReplyKeyboardMarkup([
+    [KeyboardButton("🔆 Brightness +"), KeyboardButton("🔆 Brightness -")],
+    [KeyboardButton("🔊 Volume +"), KeyboardButton("🔉 Volume -")],
+    [KeyboardButton("🔒 Lock PC"), KeyboardButton("🖥️ Shutdown PC")],
+    [KeyboardButton("🔄 Restart PC"), KeyboardButton("💤 Sleep PC")],
+    [KeyboardButton("⏪ Main Menu")]
+], resize_keyboard=True, one_time_keyboard=False)
 
+# Command handlers for common actions (can be accessed directly or via buttons)
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Provides a list of available commands and functionalities."""
     if await is_authorized(update, context):
-        await update.message.reply_text("""Available Commands:
-        /youtube - To get the YouTube URL
-        /open_whatsapp - To Open WhatsApp
-        /system_info - To get system information 
-        /screenshot - Take a screenshot of your system
-        /click_photo - Take a photo using the webcam
-        /browse - Browse files on your computer
-        /shutdown - Shutdown your computer
-        /shortcuts - Show keyboard shortcuts
-        You can also type messages like 'hello', 'bye', etc., and I will respond!""")
+        # Using a raw string (r"") and escaping all MarkdownV2 special characters
+        help_text = r"""*Available Commands & Features:*
+
+*Main Menu Options:*
+\- /start: Welcome message and main menu\.
+\- /menu: Displays the main menu buttons\.
+
+*File & System:*
+\- /browse: Browse files and folders on your PC\.
+\- /screenshot: Takes and sends a screenshot\.
+\- /click\_photo: Takes and sends a photo from your webcam\.
+\- /system\_info: Shows CPU, Memory, and Battery status\.
+
+*Control & Shortcuts:*
+\- /shortcuts: Shows a list of common keyboard shortcuts\.
+\- /open \[app\_name\]: Opens a specified application \(e\.g\.\, 'open notepad'\)\.
+\- /type \[text\]: Types the given text on your PC\.
+\- /press \[key\_name\]: Presses a single key \(e\.g\.\, 'press enter', 'press esc'\)\.
+\- /shutdown: Initiates PC shutdown sequence\.
+\- /cancel\_shutdown: Aborts a scheduled shutdown\.
+
+*Quick Actions \(via 'Quick Actions' menu\):*
+\- Open Google, Open YouTube, Open WhatsApp, Type Text, Arrow keys, Enter, Backspace, Space\.
+
+*System Control \(via 'System Control' menu\):*
+\- Brightness adjustment, Volume adjustment, Lock PC, Shutdown PC, Restart PC, Sleep PC\.
+
+*General Chat:*
+\- Try typing 'hello', 'hi', 'how are you', 'what is your name' for a quick chat\!
+        """
+        await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN_V2, reply_markup=main_menu_markup)
 
 async def youtube_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Sends a placeholder YouTube link."""
+    """Sends a YouTube link and opens it in the default browser."""
     message = update.message if update.message else update.callback_query.message
-    await message.reply_text("YouTube Link => [https://www.youtube.com/](https://www.youtube.com/)")
+    await message.reply_text("Here's a link to YouTube: https://www.youtube.com/")
+    webbrowser.open("https://www.youtube.com/") # Open on PC
 
 async def open_whatsapp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Opens WhatsApp application on the remote PC."""
     message = update.message if update.message else update.callback_query.message
-
-    kb.press_and_release('windows') # Open Start menu
-    time.sleep(0.5)
-    kb.write('WhatsApp') # Type "WhatsApp"
-    time.sleep(1)
-    kb.press_and_release('enter') # Press Enter to open
-    await message.reply_text("WhatsApp opened successfully.")
-
-async def openfunction(update: Update, context: ContextTypes.DEFAULT_TYPE, query: str):
-    """Opens an application based on user's text input."""
-    app_name = query.replace("open ", "").strip()
-    kb.press_and_release('windows')
-    time.sleep(0.5)
-    kb.write(app_name)
-    time.sleep(1)
-    kb.press_and_release('enter')
-    await update.message.reply_text(f"Opened {app_name} successfully.")
-
-async def typing(update: Update, context: ContextTypes.DEFAULT_TYPE, query: str):
-    """Types the given text on the remote PC."""
-    text_to_type = query.replace("type ", "").replace("write ", "").strip()
-    kb.write(text_to_type)
-    await update.message.reply_text("Typing completed successfully.")
-
-async def press_key(update: Update, context: ContextTypes.DEFAULT_TYPE, query: str):
-    """Presses a single key on the remote PC."""
-    key = query.replace("key press ", "").strip()
     try:
-        kb.press_and_release(key)
-        await update.message.reply_text(f"Pressed key: {key} successfully.")
+        kb.press_and_release('windows')
+        time.sleep(0.5)
+        kb.write('WhatsApp')
+        time.sleep(1)
+        kb.press_and_release('enter')
+        await message.reply_text("✅ WhatsApp opened successfully.")
     except Exception as e:
-        await update.message.reply_text(f"Error pressing key: {key}. Please try again.")
+        await handle_error(update, context, e)
+
+async def open_application(update: Update, context: ContextTypes.DEFAULT_TYPE, app_name: str):
+    """Opens an application based on user's text input."""
+    message = update.message if update.message else update.callback_query.message
+    try:
+        kb.press_and_release('windows')
+        time.sleep(0.5)
+        kb.write(app_name)
+        time.sleep(1)
+        kb.press_and_release('enter')
+        await message.reply_text(f"✅ Attempted to open: *{app_name.title()}*", parse_mode="Markdown")
+    except Exception as e:
+        await handle_error(update, context, e)
+
+async def type_text(update: Update, context: ContextTypes.DEFAULT_TYPE, text_to_type: str):
+    """Types the given text on the remote PC."""
+    message = update.message if update.message else update.callback_query.message
+    try:
+        kb.write(text_to_type)
+        await message.reply_text("✅ Typing completed successfully.")
+    except Exception as e:
+        await handle_error(update, context, e)
+
+async def press_key(update: Update, context: ContextTypes.DEFAULT_TYPE, key: str):
+    """Presses a single key or a shortcut combination on the remote PC."""
+    message = update.message if update.message else update.callback_query.message
+    try:
+        # Normalize key input
+        key = key.lower().replace(" ", "")
+        
+        # Check if it's a known shortcut name or a direct key
+        keys_to_press = key # Default to direct key name
+        for shortcut_name, shortcut_info in shortcuts.items():
+            if key == shortcut_name.lower() or key == shortcut_info['keys'].lower().replace(" ", ""):
+                keys_to_press = shortcut_info['keys']
+                break
+
+        kb.press_and_release(keys_to_press)
+        await message.reply_text(f"✅ Pressed key(s): `{keys_to_press}` successfully.")
+    except Exception as e:
+        await handle_error(update, context, e)
 
 async def system_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Retrieves and sends system information like battery and CPU/memory usage."""
+    """Retrieves and sends detailed system information like battery, CPU/memory usage, disk, and uptime."""
     message = update.message if update.message else update.callback_query.message
-
     try:
+        info_text = "🖥️ *System Information:*\n"
+        
+        # Battery Info
         battery = psutil.sensors_battery()
         if battery:
-            plugged = "Plugged In" if battery.power_plugged else "Not Plugged In"
-            percent = battery.percent
-            await message.reply_text(f"Battery is {percent}% charged and {plugged}.")
+            plugged_status = "Plugged In ⚡" if battery.power_plugged else "Not Plugged In"
+            time_left = ""
+            if battery.secsleft != psutil.POWER_TIME_UNLIMITED and battery.secsleft != psutil.POWER_TIME_UNKNOWN:
+                minutes, seconds = divmod(battery.secsleft, 60)
+                hours, minutes = divmod(minutes, 60)
+                time_left = f", Est. {int(hours)}h {int(minutes)}m remaining"
+            info_text += f"- Battery: `{battery.percent}%` ({plugged_status}{time_left})\n"
         else:
-            await message.reply_text("Unable to retrieve battery information.")
+            info_text += "- Battery: `Information not available`\n"
         
+        # CPU Info
         cpu_usage = psutil.cpu_percent(interval=1)
-        memory_usage = psutil.virtual_memory().percent
-        await message.reply_text(f"CPU usage: {cpu_usage}%\nMemory usage: {memory_usage}%")
+        info_text += f"- CPU Usage: `{cpu_usage}%`\n"
+        
+        # Memory Info
+        memory = psutil.virtual_memory()
+        info_text += f"- Memory Usage: `{memory.percent}%` (`{memory.used / (1024**3):.2f} GB` / `{memory.total / (1024**3):.2f} GB`)\n"
+
+        # Disk Info (C: drive)
+        try:
+            disk_c = psutil.disk_usage('C:\\')
+            info_text += f"- C:\\ Disk Usage: `{disk_c.percent}%` (`{disk_c.used / (1024**3):.2f} GB` / `{disk_c.total / (1024**3):.2f} GB`)\n"
+        except Exception:
+            info_text += "- C:\\ Disk Usage: `Information not available`\n"
+
+        # Network Info (basic)
+        net_io = psutil.net_io_counters()
+        info_text += f"- Network (Sent/Recv): `{net_io.bytes_sent / (1024**2):.2f} MB` / `{net_io.bytes_recv / (1024**2):.2f} MB`\n"
+
+        # Uptime
+        boot_time_timestamp = psutil.boot_time()
+        boot_time_readable = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(boot_time_timestamp))
+        info_text += f"- Last Boot: `{boot_time_readable}`\n"
+        
+        await message.reply_text(info_text, parse_mode="Markdown")
     except Exception as e:
-        await message.reply_text(f"Error getting system info: {e}")
+        await handle_error(update, context, e)
 
 async def take_screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Takes a screenshot of the remote PC and sends it to the user."""
     message = update.message if update.message else update.callback_query.message
-
     try:
         screenshot_path = "screenshot.png"
         screenshot = pyautogui.screenshot()
         screenshot.save(screenshot_path)
         
-        await message.reply_text("Screenshot taken successfully. Sharing it with you...")
+        await message.reply_text("📸 Taking screenshot...", parse_mode="Markdown")
         await message.reply_photo(photo=open(screenshot_path, "rb"))
-        os.remove(screenshot_path)  # Clean up the saved screenshot file
+        os.remove(screenshot_path)  # Clean up
     except Exception as e:
-        await message.reply_text(f"Error taking screenshot: {e}")
+        await handle_error(update, context, e)
 
 async def click_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Takes a photo using the webcam and sends it to the user."""
     message = update.message if update.message else update.callback_query.message
-
-    camera = cv2.VideoCapture(0) # Initialize webcam capture
     try:
-        photo_path = "photo.jpg"
-        return_value, image = camera.read() # Read a frame from the camera
+        photo_path = "webcam_photo.jpg"
+        camera = cv2.VideoCapture(0) # 0 is typically the default webcam
+        
+        if not camera.isOpened():
+            await message.reply_text("⚠️ No webcam detected or it is in use by another application.")
+            return
+
+        # Give camera time to warm up
+        time.sleep(1) 
+        return_value, image = camera.read()
         
         if return_value:
-            cv2.imwrite(photo_path, image) # Save the captured image
-            await message.reply_text("Photo clicked successfully. Sharing it with you...")
+            cv2.imwrite(photo_path, image)
+            await message.reply_text("📷 Photo clicked successfully. Sharing it with you...", parse_mode="Markdown")
             await message.reply_photo(photo=open(photo_path, "rb"))
-            os.remove(photo_path)  # Clean up the saved photo file
+            os.remove(photo_path)  # Clean up
         else:
-            await message.reply_text("Failed to capture photo. Please ensure your camera is connected.")
+            await message.reply_text("Failed to capture photo. Ensure your camera is connected and not in use.")
     except Exception as e:
-        await message.reply_text(f"Error capturing photo: {e}")
+        await handle_error(update, context, e)
     finally:
-        camera.release() # Release the camera resource
-        cv2.destroyAllWindows() # Close any OpenCV windows
+        if 'camera' in locals() and camera.isOpened():
+            camera.release()
+        cv2.destroyAllWindows()
 
-async def show_apps(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Simulates Windows+Tab to show open applications."""
-    kb.press_and_release("windows+tab")
-    await update.message.reply_text("Show Apps successful")
-    
-async def Chenge_tab(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# System control actions (keyboard simulations)
+async def swap_app(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Simulates Alt+Tab to switch between open applications."""
+    if not await is_authorized(update, context): return
+    try:
+        kb.press_and_release("alt+tab")
+        await update.message.reply_text("✅ Switched application.")
+    except Exception as e: await handle_error(update, context, e)
+
+async def change_tab_next(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Simulates Ctrl+Tab to switch to the next browser tab."""
-    kb.press_and_release("ctrl+tab")
-    await update.message.reply_text("Change Tab successful")
+    if not await is_authorized(update, context): return
+    try:
+        kb.press_and_release("ctrl+tab")
+        await update.message.reply_text("✅ Switched to next tab.")
+    except Exception as e: await handle_error(update, context, e)
 
-async def Press_enter(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Simulates pressing the Enter key."""
-    kb.press_and_release("enter")
-    await update.message.reply_text("Press Enter successful")
-
-async def Chenge_window(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Simulates Alt+Tab to switch between open windows."""
-    kb.press_and_release("alt+tab")
-    await update.message.reply_text("Change Window successful")
-
-async def up(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Simulates pressing the Up arrow key."""
-    kb.press_and_release("up")
-    await update.message.reply_text("⬆️ Press successful")
-
-async def down(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Simulates pressing the Down arrow key."""
-    kb.press_and_release("down")
-    await update.message.reply_text("⬇️ Press successful")
-
-async def left(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Simulates pressing the Left arrow key."""
-    kb.press_and_release("left")
-    await update.message.reply_text("⬅️ Press successful")
-
-async def right(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Simulates pressing the Right arrow key."""
-    kb.press_and_release("right")
-    await update.message.reply_text("➡️ Press successful")
-    
-async def backspace(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Simulates pressing the Backspace key."""
-    kb.press_and_release("backspace")
-    await update.message.reply_text("🔙 Press successful")
-
-async def home(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Simulates pressing the Home key."""
-    kb.press_and_release("home")
-    await update.message.reply_text("Home Press successful")
-
-async def end(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Simulates pressing the End key."""
-    kb.press_and_release("end")
-    await update.message.reply_text("End Press successful")
-
-async def zoomin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Simulates Ctrl++ to zoom in."""
-    kb.press_and_release("ctrl+plus")
-    await update.message.reply_text("Zoom IN successful")
-
-async def zoomout(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Simulates Ctrl+- to zoom out."""
-    kb.press_and_release("ctrl+-")
-    await update.message.reply_text("Zoom OUT successful")
-
-async def pre_tab(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def change_tab_prev(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Simulates Ctrl+Shift+Tab to switch to the previous browser tab."""
-    kb.press_and_release("ctrl+shift+tab")
-    await update.message.reply_text("Previous Tab successful")
+    if not await is_authorized(update, context): return
+    try:
+        kb.press_and_release("ctrl+shift+tab")
+        await update.message.reply_text("✅ Switched to previous tab.")
+    except Exception as e: await handle_error(update, context, e)
 
-async def refress(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Simulates F5 to refresh the current window."""
-    kb.press_and_release("f5")
-    await update.message.reply_text("Refresh successful")
+async def press_enter_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Simulates pressing the Enter key."""
+    if not await is_authorized(update, context): return
+    try:
+        kb.press_and_release("enter")
+        await update.message.reply_text("✅ 'Enter' key pressed.")
+    except Exception as e: await handle_error(update, context, e)
 
-async def tab_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Simulates pressing the Tab key."""
-    kb.press_and_release("tab")
-    await update.message.reply_text("TAB press successful")
-
-async def space(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def press_space_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Simulates pressing the Spacebar."""
-    kb.press_and_release("space")
-    await update.message.reply_text("Space press successful")
+    if not await is_authorized(update, context): return
+    try:
+        kb.press_and_release("space")
+        await update.message.reply_text("✅ 'Space' key pressed.")
+    except Exception as e: await handle_error(update, context, e)
 
-async def undo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def refresh_window(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Simulates F5 to refresh the current window."""
+    if not await is_authorized(update, context): return
+    try:
+        kb.press_and_release("f5")
+        await update.message.reply_text("✅ Window refreshed.")
+    except Exception as e: await handle_error(update, context, e)
+
+async def press_tab_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Simulates pressing the Tab key."""
+    if not await is_authorized(update, context): return
+    try:
+        kb.press_and_release("tab")
+        await update.message.reply_text("✅ 'Tab' key pressed.")
+    except Exception as e: await handle_error(update, context, e)
+
+async def arrow_up(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Simulates pressing the Up arrow key."""
+    if not await is_authorized(update, context): return
+    try:
+        kb.press_and_release("up")
+        await update.message.reply_text("⬆️ 'Up' arrow pressed.")
+    except Exception as e: await handle_error(update, context, e)
+
+async def arrow_down(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Simulates pressing the Down arrow key."""
+    if not await is_authorized(update, context): return
+    try:
+        kb.press_and_release("down")
+        await update.message.reply_text("⬇️ 'Down' arrow pressed.")
+    except Exception as e: await handle_error(update, context, e)
+
+async def arrow_left(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Simulates pressing the Left arrow key."""
+    if not await is_authorized(update, context): return
+    try:
+        kb.press_and_release("left")
+        await update.message.reply_text("⬅️ 'Left' arrow pressed.")
+    except Exception as e: await handle_error(update, context, e)
+
+async def arrow_right(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Simulates pressing the Right arrow key."""
+    if not await is_authorized(update, context): return
+    try:
+        kb.press_and_release("right")
+        await update.message.reply_text("➡️ 'Right' arrow pressed.")
+    except Exception as e: await handle_error(update, context, e)
+    
+async def press_backspace(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Simulates pressing the Backspace key."""
+    if not await is_authorized(update, context): return
+    try:
+        kb.press_and_release("backspace")
+        await update.message.reply_text("🔙 'Backspace' pressed.")
+    except Exception as e: await handle_error(update, context, e)
+
+async def press_home(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Simulates pressing the Home key."""
+    if not await is_authorized(update, context): return
+    try:
+        kb.press_and_release("home")
+        await update.message.reply_text("✅ 'Home' key pressed.")
+    except Exception as e: await handle_error(update, context, e)
+
+async def press_end(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Simulates pressing the End key."""
+    if not await is_authorized(update, context): return
+    try:
+        kb.press_and_release("end")
+        await update.message.reply_text("✅ 'End' key pressed.")
+    except Exception as e: await handle_error(update, context, e)
+
+async def zoom_in(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Simulates Ctrl++ to zoom in."""
+    if not await is_authorized(update, context): return
+    try:
+        kb.press_and_release("ctrl+plus")
+        await update.message.reply_text("✅ Zoomed In.")
+    except Exception as e: await handle_error(update, context, e)
+
+async def zoom_out(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Simulates Ctrl+- to zoom out."""
+    if not await is_authorized(update, context): return
+    try:
+        kb.press_and_release("ctrl+-")
+        await update.message.reply_text("✅ Zoomed Out.")
+    except Exception as e: await handle_error(update, context, e)
+
+async def undo_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Simulates Ctrl+Z for undo."""
-    kb.press_and_release("ctrl+z")
-    await update.message.reply_text("Undo successful")
+    if not await is_authorized(update, context): return
+    try:
+        kb.press_and_release("ctrl+z")
+        await update.message.reply_text("✅ Undo action triggered.")
+    except Exception as e: await handle_error(update, context, e)
 
-async def redu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def redo_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Simulates Ctrl+Y for redo."""
-    kb.press_and_release("ctrl+y")
-    await update.message.reply_text("Redo successful")
+    if not await is_authorized(update, context): return
+    try:
+        kb.press_and_release("ctrl+y")
+        await update.message.reply_text("✅ Redo action triggered.")
+    except Exception as e: await handle_error(update, context, e)
 
 async def increase_brightness(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Increases the screen brightness."""
+    if not await is_authorized(update, context): return
     try:
         current_brightness = sbc.get_brightness()[0]
-        new_brightness = min(current_brightness + 10, 100) # Increase by 10%, max 100%
+        new_brightness = min(current_brightness + 10, 100)
         sbc.set_brightness(new_brightness)
-        await update.message.reply_text(f"New brightness: {new_brightness}%")
+        await update.message.reply_text(f"🔆 Brightness increased to: `{new_brightness}%`", parse_mode="Markdown")
     except Exception as e:
-        await update.message.reply_text(f"Error adjusting brightness: {e}")
+        await handle_error(update, context, e)
 
 async def decrease_brightness(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Decreases the screen brightness."""
+    if not await is_authorized(update, context): return
     try:
         current_brightness = sbc.get_brightness()[0]
-        new_brightness = max(current_brightness - 10, 0) # Decrease by 10%, min 0%
+        new_brightness = max(current_brightness - 10, 0)
         sbc.set_brightness(new_brightness)
-        await update.message.reply_text(f"New brightness: {new_brightness}%")
+        await update.message.reply_text(f"🔆 Brightness decreased to: `{new_brightness}%`", parse_mode="Markdown")
     except Exception as e:
-        await update.message.reply_text(f"Error adjusting brightness: {e}")
+        await handle_error(update, context, e)
 
 async def increase_volume(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Increases the system volume."""
+    if not await is_authorized(update, context): return
     try:
         devices = AudioUtilities.GetSpeakers()
         interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-        volume = interface.QueryInterface(IAudioEndpointVolume)
+        volume = cast(interface, POINTER(IAudioEndpointVolume))
         current_volume = volume.GetMasterVolumeLevelScalar()
-        new_volume = min(current_volume + 0.10, 1.0) # Increase by 10%, max 1.0 (100%)
+        new_volume = min(current_volume + 0.10, 1.0)
         volume.SetMasterVolumeLevelScalar(new_volume, None)
-        await update.message.reply_text(f"New volume: {new_volume * 100:.0f}%")
+        await update.message.reply_text(f"🔊 Volume increased to: `{new_volume * 100:.0f}%`", parse_mode="Markdown")
     except Exception as e:
-        await update.message.reply_text(f"Error adjusting volume: {e}")
+        await handle_error(update, context, e)
 
 async def decrease_volume(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Decreases the system volume."""
+    if not await is_authorized(update, context): return
     try:
         devices = AudioUtilities.GetSpeakers()
         interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-        volume = interface.QueryInterface(IAudioEndpointVolume)
+        volume = cast(interface, POINTER(IAudioEndpointVolume))
         current_volume = volume.GetMasterVolumeLevelScalar()
-        new_volume = max(current_volume - 0.10, 0.0) # Decrease by 10%, min 0.0 (0%)
+        new_volume = max(current_volume - 0.10, 0.0)
         volume.SetMasterVolumeLevelScalar(new_volume, None)
-        await update.message.reply_text(f"New volume: {new_volume * 100:.0f}%")
+        await update.message.reply_text(f"🔉 Volume decreased to: `{new_volume * 100:.0f}%`", parse_mode="Markdown")
     except Exception as e:
-        await update.message.reply_text(f"Error adjusting volume: {e}")
+        await handle_error(update, context, e)
 
-async def find_shortkut(update: Update, context: ContextTypes.DEFAULT_TYPE, query: str):
-    """Finds and executes a shortcut based on user's text input."""
+async def lock_pc(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Locks the PC."""
+    if not await is_authorized(update, context): return
     try:
-        query = query.replace("press ", "").replace("and ", "end") # Normalize input
-        for k, v in shortcuts.items():
-            if v == query: # If user provided the key combination (e.g., "ctrl+c")
-                kb.write(k) # Simulate typing the shortcut name (might be unintended behavior)
-                await update.message.reply_text(f"press {v} successful")
-                break
-            elif k == query: # If user provided the shortcut name (e.g., "copy")
-                kb.press_and_release(v) # Simulate the actual key press
-                await update.message.reply_text(f"press {k} successful")
-                break
-        else:
-            await update.message.reply_text("Shortcut not found. Please try again.")
+        subprocess.run(["rundll32.exe", "user32.dll,LockWorkStation"])
+        await update.message.reply_text("🔒 PC has been locked.")
     except Exception as e:
-        await update.message.reply_text(f"Error executing shortcut: {e}")
+        await handle_error(update, context, e)
+
+async def restart_pc(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Prompts for confirmation before restarting the PC."""
+    if not await is_authorized(update, context): return
+    try:
+        keyboard = [
+            [InlineKeyboardButton("✅ Yes, restart now", callback_data="confirm_restart")],
+            [InlineKeyboardButton("❌ Cancel", callback_data="cancel_restart")]
+        ]
+        await update.message.reply_text(
+            "⚠️ Are you sure you want to restart the PC?",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    except Exception as e:
+        await handle_error(update, context, e)
+
+async def confirm_restart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Executes the PC restart command immediately."""
+    if not await is_authorized(update, context): return
+    try:
+        message = update.callback_query.message
+        await message.edit_text("🔄 Restarting PC NOW...")
+        os.system("shutdown /r /t 1") # Immediate restart
+    except Exception as e:
+        await handle_error(update, context, e)
+
+async def cancel_restart(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cancels any pending PC restart."""
+    if not await is_authorized(update, context): return
+    try:
+        message = update.callback_query.message
+        await message.edit_text("✅ Restart cancelled.")
+    except Exception as e:
+        await handle_error(update, context, e)
+
+async def sleep_pc(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Puts the PC into sleep mode."""
+    if not await is_authorized(update, context): return
+    try:
+        subprocess.run(["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"])
+        await update.message.reply_text("💤 PC is going to sleep...")
+    except Exception as e:
+        await handle_error(update, context, e)
 
 async def chatbot_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -708,122 +1064,127 @@ async def chatbot_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_authorized(update, context):
         return
 
-    query = update.message.text.lower() # Lowercase for easier matching
-    user_input = update.message.text # Original input for exact button matches
-    
-    if "name" in query:
-        response = response_dict.get(query, "My name is ROZ.")
-        await update.message.reply_text(response)
-    elif "open" in query:
-        await openfunction(update, context, query)
-    elif "write" in query or "type" in query:
-        await typing(update, context, query)
-    elif "key press" in query:
-        await press_key(update, context, query)
-    elif "press" in query:
-        await find_shortkut(update, context, query)
-    elif 'google' in query:
-        query = query.replace("google", "")
-        search_query = f"[https://www.google.com/search?q=](https://www.google.com/search?q=){query}"
-        webbrowser.open(search_query) # Open in default browser
-        await update.message.reply_text(f"Searching Google for: {query}")
-    elif 'youtube' in query:
-        query = query.replace("youtube", "")
-        search_query = f"[https://www.youtube.com/search?q=](https://www.youtube.com/search?q=){query}"
-        webbrowser.open(search_query) # Open in default browser
-    # Handle Reply Keyboard button presses (exact text matches)
-    elif user_input == "🔃 Swap App":
-        await Chenge_window(update, context)
-    elif user_input == "📁 Files":
+    query = update.message.text.lower().strip()
+    user_input_raw = update.message.text.strip() # Preserve original case for specific button matches
+
+    # Handle menu button presses (ReplyKeyboard)
+    if user_input_raw == "📁 Browse Files":
         await browse_files(update, context)
-    elif user_input == "🖥️ System Info":
+    elif user_input_raw == "🖥️ System Info":
         await system_info(update, context)
-    elif user_input == "📸 Screenshot":
+    elif user_input_raw == "📸 Screenshot":
         await take_screenshot(update, context)
-    elif user_input == "📷 Click Photo":
+    elif user_input_raw == "📷 Click Photo":
         await click_photo(update, context)
-    elif user_input == "🔁 Next Tab":
-        await Chenge_tab(update, context)
-    elif user_input == "TAB":
-        await tab_key(update, context)
-    elif user_input == "🔁 Prev Tab":
-        await pre_tab(update, context)
-    elif user_input == "Space":
-        await space(update, context)
-    elif user_input == "Refress":
-        await refress(update, context)       
-    elif user_input == "↩️ Enter":
-        await Press_enter(update, context)
-    elif user_input == "ℹ️ Help":
+    elif user_input_raw == "⚡ Shortcuts":
+        await send_shortcut_buttons(update, context)
+    elif user_input_raw == "🚀 Quick Actions":
+        await update.message.reply_text("⚡ *Quick Actions Menu:*", parse_mode="Markdown", reply_markup=quick_actions_markup)
+    elif user_input_raw == "⚙️ System Control":
+        await update.message.reply_text("⚙️ *System Control Menu:*", parse_mode="Markdown", reply_markup=system_control_markup)
+    elif user_input_raw == "ℹ️ Help":
         await help_command(update, context)
-    elif user_input == "⚙️ More Options":
-        await update.message.reply_text(
-            "More options menu. Choose an option:",
-            reply_markup=more_options_markup
-        )
-    elif user_input == "📲 Show Apps":
-        await show_apps(update, context)
-    elif user_input == "⬆️":
-        await up(update, context)       
-    elif user_input == "⬇️":
-        await down(update, context)       
-    elif user_input == "➡️":
-        await right(update, context)
-    elif user_input == "⬅️":
-        await left(update, context)
-    elif user_input == "Home":
-        await home(update, context)
-    elif user_input == "End":
-        await end(update, context)
-    elif user_input == "🔙":
-        await backspace(update, context)
-    elif user_input == "↩️": # This seems to be a duplicate of "↩️ Enter"
-        await Press_enter(update, context)
-    elif user_input == "🔍 Zoom IN":
-        await zoomin(update, context)
-    elif user_input == "🔎 Zoom OUT":
-        await zoomout(update, context)
-    elif user_input == "⏩ Next Menu":
-        await update.message.reply_text(
-            "More options menu. Choose an option:",
-            reply_markup=system_markup
-        )
-    elif user_input == "🔅➕":
+    elif user_input_raw == "⏪ Main Menu":
+        await main_menu(update, context)
+    elif user_input_raw == "🌐 Open Google":
+        webbrowser.open("https://www.google.com")
+        await update.message.reply_text("✅ Opened Google in browser.")
+    elif user_input_raw == "▶️ Open YouTube":
+        await youtube_url(update, context)
+    elif user_input_raw == "💬 Open WhatsApp":
+        await open_whatsapp(update, context)
+    elif user_input_raw == "📝 Type Text":
+        await update.message.reply_text("Please reply to this message with the text you want me to type.",
+                                        reply_markup=ReplyKeyboardRemove()) # Remove buttons temporarily
+        context.user_data['awaiting_text_input'] = True
+    elif user_input_raw == "⬆️ Up":
+        await arrow_up(update, context)
+    elif user_input_raw == "⬇️ Down":
+        await arrow_down(update, context)
+    elif user_input_raw == "⬅️ Left":
+        await arrow_left(update, context)
+    elif user_input_raw == "➡️ Right":
+        await arrow_right(update, context)
+    elif user_input_raw == "↩️ Enter":
+        await press_enter_key(update, context)
+    elif user_input_raw == "🔙 Backspace":
+        await press_backspace(update, context)
+    elif user_input_raw == "Space":
+        await press_space_key(update, context)
+    elif user_input_raw == "🔆 Brightness +":
         await increase_brightness(update, context)
-    elif user_input == "🔅➖":
+    elif user_input_raw == "🔆 Brightness -":
         await decrease_brightness(update, context)
-    elif user_input == "🔊":
+    elif user_input_raw == "🔊 Volume +":
         await increase_volume(update, context)
-    elif user_input == "🔉":
+    elif user_input_raw == "🔉 Volume -":
         await decrease_volume(update, context)
-    elif user_input == "Undu":
-        await undo(update, context)
-    elif user_input == "Redu":
-        await redu(update, context)
-    elif user_input == "⏪ Previus Menu":
-        await update.message.reply_text(
-            "Back to the main menu:",
-            reply_markup=more_options_markup
-        )
-    elif user_input == "🏠 Menu":
-        await update.message.reply_text(
-            "Back to the main menu:",
-            reply_markup=main_menu_markup
-        )
-    elif user_input == "⏪ Main Menu":
-        await update.message.reply_text(
-            "Back to the main menu:",
-            reply_markup=main_menu_markup
-        )
+    elif user_input_raw == "🔒 Lock PC":
+        await lock_pc(update, context)
+    elif user_input_raw == "🖥️ Shutdown PC":
+        await shutdown_pc(update, context)
+    elif user_input_raw == "🔄 Restart PC":
+        await restart_pc(update, context)
+    elif user_input_raw == "💤 Sleep PC":
+        await sleep_pc(update, context)
+    elif user_input_raw == "🔃 Swap App":
+        await swap_app(update, context)
+    elif user_input_raw == "🔁 Next Tab":
+        await change_tab_next(update, context)
+    elif user_input_raw == "🔁 Prev Tab":
+        await change_tab_prev(update, context)
+    elif user_input_raw == "TAB":
+        await press_tab_key(update, context)
+    elif user_input_raw == "Refress":
+        await refresh_window(update, context)
+    elif user_input_raw == "Home":
+        await press_home(update, context)
+    elif user_input_raw == "End":
+        await press_end(update, context)
+    elif user_input_raw == "🔍 Zoom IN":
+        await zoom_in(update, context)
+    elif user_input_raw == "🔎 Zoom OUT":
+        await zoom_out(update, context)
+    elif user_input_raw == "Undu":
+        await undo_action(update, context)
+    elif user_input_raw == "Redu":
+        await redo_action(update, context)
+    
+    # Handle text input for 'type text'
+    elif context.user_data.get('awaiting_text_input'):
+        text_to_type = user_input_raw
+        await type_text(update, context, text_to_type)
+        context.user_data['awaiting_text_input'] = False
+        await update.message.reply_text("What next, sir?", reply_markup=quick_actions_markup) # Show quick actions again
+        
+    # Handle specific text commands
+    elif query.startswith("open "):
+        app_name = query[5:]
+        await open_application(update, context, app_name)
+    elif query.startswith("type ") or query.startswith("write "):
+        text_to_type = query.replace("type ", "").replace("write ", "").strip()
+        await type_text(update, context, text_to_type)
+    elif query.startswith("press "):
+        key_command = query[6:]
+        await press_key(update, context, key_command)
+    elif query.startswith('google '):
+        search_query = query[7:]
+        webbrowser.open(f"https://www.google.com/search?q={search_query}")
+        await update.message.reply_text(f"✅ Searching Google for: `{search_query}`", parse_mode="Markdown")
+    elif query.startswith('youtube '):
+        search_query = query[8:]
+        webbrowser.open(f"https://www.youtube.com/results?search_query={search_query}")
+        await update.message.reply_text(f"✅ Searching YouTube for: `{search_query}`", parse_mode="Markdown")
+    
+    # Handle general chatbot responses
     else:
-        # Default response if no specific command or keyword is matched
-        response = response_dict.get(query, "I'm sorry, I didn't understand that. Can you rephrase?")
-        await update.message.reply_text(response)
+        response = response_dict.get(query, "I'm sorry, I didn't understand that. Can you rephrase? Or use /help.")
+        await update.message.reply_text(response, reply_markup=main_menu_markup)
+
 
 # Register handlers
-# Command Handlers (for commands starting with '/')
 app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("menu", menu))
+app.add_handler(CommandHandler("menu", main_menu))
 app.add_handler(CommandHandler("help", help_command))
 app.add_handler(CommandHandler("youtube", youtube_url))
 app.add_handler(CommandHandler("open_whatsapp", open_whatsapp))
@@ -832,16 +1193,17 @@ app.add_handler(CommandHandler("screenshot", take_screenshot))
 app.add_handler(CommandHandler("click_photo", click_photo))
 app.add_handler(CommandHandler("browse", lambda u,c: browse_files(u,c,"C:\\"))) # Initial browse to C drive
 app.add_handler(CommandHandler("shutdown", shutdown_pc))
+app.add_handler(CommandHandler("cancel_shutdown", cancel_shutdown)) # Added handler for /cancel_shutdown
 app.add_handler(CommandHandler("shortcuts", send_shortcut_buttons))
 
-# Message Handler (for all text messages that are not commands)
+# MessageHandler for general text (including quick actions and custom commands)
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chatbot_response))
 
-# Callback Query Handler (for inline keyboard button presses)
+# CallbackQueryHandler for all inline button presses
 app.add_handler(CallbackQueryHandler(button_handler))
+
 
 # Start the bot
 if __name__ == "__main__":
     print("✅ Bot is starting...")
-    app.run_polling() # Starts the bot and keeps it running to listen for updates
-    
+    app.run_polling()
