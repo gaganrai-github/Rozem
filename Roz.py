@@ -844,3 +844,4 @@ app.add_handler(CallbackQueryHandler(button_handler))
 if __name__ == "__main__":
     print("✅ Bot is starting...")
     app.run_polling() # Starts the bot and keeps it running to listen for updates
+    
