@@ -19,7 +19,12 @@ from telegram.constants import ParseMode # Import ParseMode for explicit Markdow
 # Configuration
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "7070124825:AAFSnUIo0c-b_7dsMj8fFL_rUILLL3i7ab8")
 ALLOWED_USER_ID = 5285057277  # Replace with your Telegram user ID
-MAX_FILE_SIZE = 1024 * 1024 * 1024  # 50MB max file size for transfers
+MAX_FILE_SIZE = 1024 * 1024 * 1024  # 1GB max file size for transfers
+
+# NEW: Define specific target directories for categorization
+BASE_PROGRAMS_DIR = "C:\\Programs"
+CODE_FILES_DIR = os.path.join(BASE_PROGRAMS_DIR, "Code")
+OTHER_FILES_DIR = os.path.join(BASE_PROGRAMS_DIR, "Other")
 
 # Initialize the Application with your bot token
 app = Application.builder().token(BOT_TOKEN).build()
@@ -85,9 +90,9 @@ shortcuts = {
     'zoom in': {'keys': 'ctrl++', 'desc': 'Zooms in'},
     'zoom out': {'keys': 'ctrl+-', 'desc': 'Zooms out'},
     'reset zoom': {'keys': 'ctrl+0', 'desc': 'Resets zoom level'},
-    'clear browsing data': {'keys': 'ctrl+shift+delete', 'desc': 'Opens clear browsing data dialog'},
+    'clear Browse data': {'keys': 'ctrl+shift+delete', 'desc': 'Opens clear Browse data dialog'},
     'new incognito window': {'keys': 'ctrl+shift+n', 'desc': 'Opens a new incognito/private browser window'},
-    'private browsing': {'keys': 'ctrl+shift+p', 'desc': 'Opens a new private browser window (Firefox)'},
+    'private Browse': {'keys': 'ctrl+shift+p', 'desc': 'Opens a new private browser window (Firefox)'},
     'navigate tabs backward': {'keys': 'ctrl+shift+tab', 'desc': 'Navigates to the previous tab'},
     'switch to next window': {'keys': 'alt+tab', 'desc': 'Switches to next window (Windows)'},
     'switch to previous window': {'keys': 'alt+shift+tab', 'desc': 'Switches to previous window (Windows)'},
@@ -143,7 +148,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👋 *Welcome to ROZ - Your Remote Control Bot!* 👋\n\n"
         "I can help you control your computer remotely. "
         "Use the menu buttons below or type /help for a list of commands.\n\n"
-        "To get started, try browsing files or checking system info!",
+        "To get started, try Browse files or checking system info!",
         parse_mode="Markdown",
         reply_markup=main_menu_markup
     )
@@ -639,6 +644,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 \- /screenshot: Takes and sends a screenshot\.
 \- /click\_photo: Takes and sends a photo from your webcam\.
 \- /system\_info: Shows CPU, Memory, and Battery status\.
+\- _Send any file to the bot to have it saved in C:\\Programs\._
 
 *Control & Shortcuts:*
 \- /shortcuts: Shows a list of common keyboard shortcuts\.
@@ -662,8 +668,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def youtube_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Sends a YouTube link and opens it in the default browser."""
     message = update.message if update.message else update.callback_query.message
-    await message.reply_text("Here's a link to YouTube: https://www.youtube.com/")
-    webbrowser.open("https://www.youtube.com/") # Open on PC
+    await message.reply_text("Here's a link to YouTube: http://www.youtube.com") # Corrected YouTube URL
+    webbrowser.open("http://www.youtube.com") # Open on PC
 
 async def open_whatsapp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Opens WhatsApp application on the remote PC."""
@@ -1056,6 +1062,51 @@ async def sleep_pc(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await handle_error(update, context, e)
 
+# MODIFIED: Handler for receiving files with categorization
+async def handle_incoming_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handles incoming documents, checks authorization, creates the target directory if needed,
+    and saves the file to C:\\Programs\\Code or C:\\Programs\\Other based on its type.
+    """
+    if not await is_authorized(update, context):
+        return
+
+    document = update.message.document
+    file_name = document.file_name
+    file_extension = os.path.splitext(file_name)[1].lower()
+
+    target_directory = ""
+    file_type_description = ""
+
+    # Define code file extensions (including .txt)
+    code_extensions = ['.py', '.js', '.html', '.css', '.json', '.xml', '.md', '.txt', '.log', '.ini', '.cfg', '.java', '.c', '.cpp', '.h', '.cs', '.php', '.go', '.rb', '.sh', '.bat', '.ps1']
+    
+    # Categorize the file
+    if file_extension in code_extensions:
+        target_directory = CODE_FILES_DIR
+        file_type_description = "code/text file"
+    else:
+        target_directory = OTHER_FILES_DIR
+        file_type_description = "other file"
+
+    # Ensure the target directory exists
+    os.makedirs(target_directory, exist_ok=True)
+
+    file_path = os.path.join(target_directory, file_name)
+
+    try:
+        # Check file size before attempting to download
+        if document.file_size > MAX_FILE_SIZE:
+            await update.message.reply_text(f"⚠️ File too large (max {MAX_FILE_SIZE / (1024*1024):.0f}MB). This file is {document.file_size / (1024*1024):.2f}MB.")
+            return
+
+        new_file = await context.bot.get_file(document.file_id)
+        await new_file.download_to_drive(custom_path=file_path)
+        await update.message.reply_text(f"✅ Your {file_type_description} `{file_name}` saved successfully to `{target_directory}`.", parse_mode="Markdown")
+    except Exception as e:
+        await handle_error(update, context, e)
+
+
 async def chatbot_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Handles general text messages from the user and routes them to appropriate functions
@@ -1173,7 +1224,7 @@ async def chatbot_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✅ Searching Google for: `{search_query}`", parse_mode="Markdown")
     elif query.startswith('youtube '):
         search_query = query[8:]
-        webbrowser.open(f"https://www.youtube.com/results?search_query={search_query}")
+        webbrowser.open(f"https://www.youtube.com/results?search_query={search_query}") # Corrected Youtube URL
         await update.message.reply_text(f"✅ Searching YouTube for: `{search_query}`", parse_mode="Markdown")
     
     # Handle general chatbot responses
@@ -1195,6 +1246,9 @@ app.add_handler(CommandHandler("browse", lambda u,c: browse_files(u,c,"C:\\"))) 
 app.add_handler(CommandHandler("shutdown", shutdown_pc))
 app.add_handler(CommandHandler("cancel_shutdown", cancel_shutdown)) # Added handler for /cancel_shutdown
 app.add_handler(CommandHandler("shortcuts", send_shortcut_buttons))
+
+# Register handler for documents
+app.add_handler(MessageHandler(filters.Document.ALL, handle_incoming_document))
 
 # MessageHandler for general text (including quick actions and custom commands)
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chatbot_response))
