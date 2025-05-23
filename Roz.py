@@ -315,8 +315,8 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE, file_p
         elif ext in ['.txt', '.log', '.csv', '.html', '.css', '.json', '.xml', '.md', '.ini', '.cfg']: 
             # Offer choice to download or read content for general text files
             keyboard = [
-                [InlineKeyboardButton(f"⬇️ Download `{file_name}`", callback_data=f"download_file_{file_path}")],
-                [InlineKeyboardButton(f"📝 Read Content of `{file_name}`", callback_data=f"read_content_{file_path}")]
+                [InlineKeyboardButton(f"⬇️ Download `{file_name}`", callback_data=f"download_file_{file_path})")],
+                [InlineKeyboardButton(f"📝 Read Content of `{file_name}`", callback_data=f"read_content_{file_path})")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await message.reply_text(
@@ -326,9 +326,9 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE, file_p
             )
         elif ext in ['.py', '.js']: # Specific handling for executable scripts
             keyboard = [
-                [InlineKeyboardButton(f"⬇️ Download `{file_name}`", callback_data=f"download_file_{file_path}")],
-                [InlineKeyboardButton(f"📝 Read Content of `{file_name}`", callback_data=f"read_content_{file_path}")],
-                [InlineKeyboardButton(f"▶️ Run `{file_name}`", callback_data=f"run_file_{file_path}")] # New "Run" option
+                [InlineKeyboardButton(f"⬇️ Download `{file_name}`", callback_data=f"download_file_{file_path})")],
+                [InlineKeyboardButton(f"📝 Read Content of `{file_name}`", callback_data=f"read_content_{file_path})")],
+                [InlineKeyboardButton(f"▶️ Run `{file_name}`", callback_data=f"run_file_{file_path})")] # New "Run" option
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await message.reply_text(
@@ -473,7 +473,7 @@ async def main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = update.message or update.callback_query.message
         # Using the ReplyKeyboardMarkup for the main menu for persistent buttons
         await message.reply_text(
-            "� *Main Menu - Choose an option:*",
+            " *Main Menu - Choose an option:*",
             parse_mode="Markdown",
             reply_markup=main_menu_markup
         )
@@ -613,8 +613,8 @@ main_menu_markup = ReplyKeyboardMarkup([
 ], resize_keyboard=True, one_time_keyboard=False)
 
 quick_actions_markup = ReplyKeyboardMarkup([
-    [KeyboardButton("🌐 Open Google"), KeyboardButton("▶️ Open YouTube")],
-    [KeyboardButton("💬 Open WhatsApp"), KeyboardButton("📝 Type Text")],
+    [KeyboardButton("🌐 Open Google"), KeyboardButton("📝 Type Text")],
+    [KeyboardButton("🔃 Swap"), KeyboardButton("📲 Show Apps"), KeyboardButton("🔄 Switch N Apps")], # Added new button
     [KeyboardButton("⬆️ Up"), KeyboardButton("⬇️ Down"), KeyboardButton("⬅️ Left"), KeyboardButton("➡️ Right")],
     [KeyboardButton("↩️ Enter"), KeyboardButton("🔙 Backspace"), KeyboardButton("Space")],
     [KeyboardButton("⏪ Main Menu")]
@@ -651,11 +651,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 \- /open \[app\_name\]: Opens a specified application \(e\.g\.\, 'open notepad'\)\.
 \- /type \[text\]: Types the given text on your PC\.
 \- /press \[key\_name\]: Presses a single key \(e\.g\.\, 'press enter', 'press esc'\)\.
+\- _Use 'Switch N Apps' button to switch to the Nth application in the Alt\+Tab sequence\._
 \- /shutdown: Initiates PC shutdown sequence\.
 \- /cancel\_shutdown: Aborts a scheduled shutdown\.
 
 *Quick Actions \(via 'Quick Actions' menu\):*
-\- Open Google, Open YouTube, Open WhatsApp, Type Text, Arrow keys, Enter, Backspace, Space\.
+\- Open Google, Open YouTube, Open WhatsApp, Type Text, Arrow keys, Enter, Backspace, Space, Switch N Apps\.
 
 *System Control \(via 'System Control' menu\):*
 \- Brightness adjustment, Volume adjustment, Lock PC, Shutdown PC, Restart PC, Sleep PC\.
@@ -816,7 +817,30 @@ async def click_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cv2.destroyAllWindows()
 
 # System control actions (keyboard simulations)
-async def swap_app(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def show_apps(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Simulates Alt+Tab to switch between open applications."""
+    if not await is_authorized(update, context): return
+    try:
+        kb.press_and_release("windows+tab")
+        await update.message.reply_text("✅ Show application.")
+        await take_screenshot(update, context)
+    except Exception as e: await handle_error(update, context, e)
+
+async def initiate_multi_app_swap(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Initiates the process to switch to the Nth open application by asking for user input.
+    """
+    if not await is_authorized(update, context): return
+    try:
+        context.user_data['awaiting_multi_app_swap_input'] = True
+        await update.message.reply_text(
+            "Please enter the number of applications you want to switch through (e.g., 3 for the 3rd app):",
+            reply_markup=ReplyKeyboardRemove() # Remove buttons temporarily
+        )
+    except Exception as e:
+        await handle_error(update, context, e)
+
+async def swap(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Simulates Alt+Tab to switch between open applications."""
     if not await is_authorized(update, context): return
     try:
@@ -1118,6 +1142,33 @@ async def chatbot_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text.lower().strip()
     user_input_raw = update.message.text.strip() # Preserve original case for specific button matches
 
+    # Handle text input for 'Switch N Apps'
+    if context.user_data.get('awaiting_multi_app_swap_input'):
+        try:
+            num_tabs = int(user_input_raw)
+            if num_tabs < 1:
+                await update.message.reply_text("Please enter a positive number.")
+                return
+            
+            kb.press('alt')
+            for _ in range(num_tabs):
+                kb.press_and_release('tab')
+                time.sleep(0.1) # Small delay to ensure each tab press registers
+            kb.release('alt')
+
+            await update.message.reply_text(f"✅ Switched application by pressing Tab {num_tabs} time(s).")
+            await take_screenshot(update, context) # Take screenshot immediately after switching
+            context.user_data['awaiting_multi_app_swap_input'] = False
+            await update.message.reply_text("What next, sir?", reply_markup=quick_actions_markup) # Show quick actions again
+            return # Important to return after handling the input
+        except ValueError:
+            await update.message.reply_text("Invalid input. Please enter a number.")
+            return
+        except Exception as e:
+            await handle_error(update, context, e)
+            context.user_data['awaiting_multi_app_swap_input'] = False # Reset flag on error
+            return
+
     # Handle menu button presses (ReplyKeyboard)
     if user_input_raw == "📁 Browse Files":
         await browse_files(update, context)
@@ -1178,8 +1229,12 @@ async def chatbot_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await restart_pc(update, context)
     elif user_input_raw == "💤 Sleep PC":
         await sleep_pc(update, context)
-    elif user_input_raw == "🔃 Swap App":
-        await swap_app(update, context)
+    elif user_input_raw == "🔃 Swap":
+        await swap(update, context)
+    elif user_input_raw == "📲 Show Apps":
+        await show_apps(update, context)
+    elif user_input_raw == "🔄 Switch N Apps": # New button handler
+        await initiate_multi_app_swap(update, context)
     elif user_input_raw == "🔁 Next Tab":
         await change_tab_next(update, context)
     elif user_input_raw == "🔁 Prev Tab":
@@ -1246,6 +1301,8 @@ app.add_handler(CommandHandler("browse", lambda u,c: browse_files(u,c,"C:\\"))) 
 app.add_handler(CommandHandler("shutdown", shutdown_pc))
 app.add_handler(CommandHandler("cancel_shutdown", cancel_shutdown)) # Added handler for /cancel_shutdown
 app.add_handler(CommandHandler("shortcuts", send_shortcut_buttons))
+# Removed the direct CommandHandler for swap_app_n_times as it's now conversational
+# app.add_handler(CommandHandler("swap_app_n", swap_app_n_times)) 
 
 # Register handler for documents
 app.add_handler(MessageHandler(filters.Document.ALL, handle_incoming_document))
