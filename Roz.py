@@ -695,6 +695,7 @@ async def open_application(update: Update, context: ContextTypes.DEFAULT_TYPE, a
         time.sleep(1)
         kb.press_and_release('enter')
         await message.reply_text(f"✅ Attempted to open: *{app_name.title()}*", parse_mode="Markdown")
+        await take_screenshot(update, context)
     except Exception as e:
         await handle_error(update, context, e)
 
